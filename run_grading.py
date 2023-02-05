@@ -7,18 +7,14 @@ on D2L brightspace format. Lastly will create a CSV document in D2L format to up
 Any erroneous submissions will be reported in the console as error to the user and will inform you of student name, ID
 and folder name
 """
+
 from os import listdir, system
 import sys
 import os
 import shutil
-import time
 import importlib
 import pathlib
 import csv
-import logging
-import grade_lab_4
-from grade_lab_4 import *
-
 
 __author__ = "Boaz Aharony"
 __copyright__ = "Copyright 2023, Boaz Aharony"
@@ -26,13 +22,17 @@ __maintainer__ = "Boaz Aharony"
 __email__ = "boazaharony@cmail.carleton.ca"
 __status__ = "Dev"
 
-
-
+########################## CHANGE EVERY LAB ###########################################################################
 LAB_NAME = 'lab4'
-SAVE_GRADES_TO = 'Merge ECOR1041EECOR1041FECOR1041GECOR1041H Computation and Programming (LEC) [12024120251202612027] Winter 2023_Grades.csv'
+LAB_GRADING_SOFTWARE_NAME = 'grade_lab_4.py'
+
+SAVE_GRADES_TO = 'Merge ECOR1041EECOR1041FECOR1041GECOR1041H Computation and Programming (LEC) [12024120251202612027] ' \
+                 'Winter 2023_Grades.csv '
 GRADES_CSV_HEADER = 'Lab 4 Points Grade <Numeric MaxPoints:10 Weight:16.66666667 Category:Labs CategoryWeight:10>'
 
-# print to txt file to read it after
+########################## CHANGE EVERY LAB ###########################################################################
+
+# save original print streams
 original_stdout = sys.stdout
 original_stderr = sys.stderr
 
@@ -46,25 +46,28 @@ def filter_folders(names: list):
             names.remove(filename)
 
 
-def copy_outside(folder: str):
+def copy_outside(student_folder: str):
     """Copy lab folder outside
     """
-    src_folder = os.path.abspath(os.getcwd()) + '\\' + folder
+    src_folder = os.path.abspath(os.getcwd()) + '\\' + student_folder
     dst_folder = os.path.abspath(os.getcwd())
 
     # file names
     src_file = src_folder + "\\" + LAB_NAME + ".py"
     dst_file = dst_folder + "\\" + LAB_NAME + ".py"
 
+    if os.path.exists(dst_file):
+        os.remove(dst_file)
+
     shutil.copyfile(src_file, dst_file)
 
 
-def add_feedback_text(folder: str, specific_feedback: str):
+def add_feedback_text(student_folder: str, specific_feedback: str):
     """move feedback to top of student's submitted file
     """
 
     # Find student file
-    src_file = list(pathlib.Path(os.path.abspath(os.getcwd()) + '\\' + folder).glob('*.py'))[0]
+    src_file = list(pathlib.Path(os.path.abspath(os.getcwd()) + '\\' + student_folder).glob('*.py'))[0]
     # add # to first line and after every \n
     specific_feedback = '################### FEEDBACK ############################\n' + \
                         '# ' + specific_feedback.replace('\n', '\n# ') + \
@@ -86,33 +89,6 @@ def add_feedback_text(folder: str, specific_feedback: str):
     file.close()
 
 
-def grade():
-    """Run grading script
-    """
-    importlib.reload(grade_lab_4)
-    if __name__ == '__main__':
-        result = unittest.main(verbosity=2, exit=False).result
-
-        print("\nLab 4 grading summary for {0}, {1}:".format(
-            __author__, __student_number__))
-
-        print('No. of tests run:', result.testsRun)
-        print('No. of errors:', len(result.errors))
-        print('No. of failures:', len(result.failures))
-        passes = result.testsRun - len(result.errors) - len(result.failures)
-        print("No. of tests passed:", passes)
-
-        # Calculate an integer score out of 10.
-        print("Score = {0} / 10".format(round(passes / result.testsRun * 10)))
-
-        score = round(passes / result.testsRun * 10)
-    else:
-        print('error in grading')
-        score = -1
-        print('Review student: ' + name + ', ID#: ' + student_id, file=original_stderr)
-    return score
-
-
 def parse_name_and_student_id(folder_name: str):
     """get name and student id from folder
     """
@@ -122,39 +98,42 @@ def parse_name_and_student_id(folder_name: str):
         name_and_id = split_folder[1]
     else:
         name_and_id = split_folder[2]
-    student_id = name_and_id[-9:]
-    name = name_and_id[:-10]
+    student_id_part = name_and_id[-9:]
+    name_part = name_and_id[:-10]
 
-    name = fix_name_order(name)
+    name_part = fix_name_order(name_part)
 
-    return name, student_id
+    return name_part, student_id_part
 
 
-def fix_name_order(name: str):
-    name_first_last = name.split(' ')
+def fix_name_order(name_part: str):
+    """Puts first name then last name as opposed to the brightspace order of last first
+    """
+    name_first_last = name_part.split(' ')
     if len(name_first_last) == 2:
-        name = name_first_last[-1]+' '+name_first_last[0]
+        name_part = name_first_last[-1] + ' ' + name_first_last[0]
     elif len(name_first_last) == 1:
-        name = ' - '+ name_first_last[0]
+        name_part = ' - ' + name_first_last[0]
         print('odd name check proper copy of name', file=original_stdout)
     elif len(name_first_last) > 2:
-        name = name_first_last[-1]+' '+' '.join(name_first_last[:-1])
+        name_part = name_first_last[-1] + ' ' + ' '.join(name_first_last[:-1])
     else:
-        print('debug: '+name, file=original_stderr)
-    return name
+        print('debug: ' + name_part, file=original_stderr)
+    return name_part
+
 
 def update_file_and_check_syntax():
     """update file in cache to new file in folder and check that it works
     """
     can_mark = True
     try:
-        import lab4
-        importlib.reload(lab4)
+        exec('import ' + LAB_NAME)
     except:
         can_mark = False
     return can_mark
 
 
+# noinspection PyPep8Naming
 def save_grade_to_CSV(grades: list, fieldnames: list):
     """Saves list of grades with fieldnames to a csv file"""
     with open(SAVE_GRADES_TO, 'w', encoding='UTF8', newline='') as f:
@@ -164,10 +143,13 @@ def save_grade_to_CSV(grades: list, fieldnames: list):
 
 
 # main script
+
+# Get student folder list
 folders = listdir()
 filter_folders(folders)
 scores = []
 
+# Grade each file
 for folder in folders:
 
     # Get name and ID
@@ -190,39 +172,45 @@ for folder in folders:
         good_syntax = update_file_and_check_syntax()
 
         if good_syntax:
-            from lab4 import __author__, __student_number__
+            exec('import ' + LAB_NAME)  # imports the students lab
+            exec('given_id = ' + LAB_NAME + ".__student_number__.replace(' ', '')")  # imports the student ID
 
-            if __student_number__.replace(' ', '') == student_id:
+            if given_id == student_id:  # if the expected ID matches
                 # Grade lab
-                score = grade()
+                exec(open(LAB_GRADING_SOFTWARE_NAME).read())
+                score = round(passes / result.testsRun * 10)
 
             else:
-                # possible plagiarism
-                print('ID doesn\'t match', 'expected:', student_id, ' but received', __student_number__)
-                print('File Author name:', __author__, '- Expected Author name:', name)
+                # possible plagiarism, tell TA to further review
+                exec('given_author = ' + LAB_NAME + ".__author__")
+                print('ID doesn\'t match', 'expected:', student_id, ' but received', given_id)
+                print('File Author name:', given_author, '- Expected Author name:', name)
                 print('FURTHER REVIEW REQUIRED')
                 score = -1
                 print('Review student: ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
                       file=original_stderr)
+
+            del sys.modules[LAB_NAME]  # delete the current lab
 
         else:
             score = 0
             print('Syntax error in code (0/10)')
 
     else:
-        # give 0
         print('wrong file name: (0/10) -> should be ' + LAB_NAME + '.py')
         score = 0
 
-    # Close print saving
+    # Close print saving to txt file
     new_location_write.close()
     sys.stdout = original_stdout
     sys.stderr = original_stderr
 
-    scores.append({'Name':name,'OrgDefinedId': student_id,
-                   'Lab 4 Points Grade <Numeric MaxPoints:10 Weight:16.66666667 Category:Labs CategoryWeight:10>': score,
+    # Add score to dictionary
+    scores.append({'Name': name, 'OrgDefinedId': student_id,
+                   GRADES_CSV_HEADER: score,
                    "End-of-Line Indicator": '#'})
 
+    # read the feedback
     new_location_read = open("output.txt", 'r')
     feedback = new_location_read.read()
     new_location_read.close()
@@ -230,10 +218,15 @@ for folder in folders:
     # Add feedback to students file
     add_feedback_text(folder, feedback)
 
+# delete unnecessary files
+os.remove(os.path.abspath(os.getcwd()) + '\\output.txt')
+
+if os.path.exists(os.path.abspath(os.getcwd()) + '\\' + LAB_NAME + '.py'):
+    os.remove(os.path.abspath(os.getcwd()) + '\\' + LAB_NAME + '.py')
+
 # csv header
-field_names = ['Name','OrgDefinedId',
+field_names = ['Name', 'OrgDefinedId',
                GRADES_CSV_HEADER,
                'End-of-Line Indicator']
-
-# save as CSV
+# save grades to CSV
 save_grade_to_CSV(scores, field_names)
