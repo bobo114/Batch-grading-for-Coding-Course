@@ -114,7 +114,6 @@ def fix_name_order(name_part: str):
         name_part = name_first_last[-1] + ' ' + name_first_last[0]
     elif len(name_first_last) == 1:
         name_part = ' - ' + name_first_last[0]
-        print('odd name check proper copy of name', file=original_stdout)
     elif len(name_first_last) > 2:
         name_part = name_first_last[-1] + ' ' + ' '.join(name_first_last[:-1])
     else:
@@ -173,22 +172,38 @@ for folder in folders:
 
         if good_syntax:
             exec('import ' + LAB_NAME)  # imports the students lab
-            exec('given_id = ' + LAB_NAME + ".__student_number__.replace(' ', '')")  # imports the student ID
 
-            if given_id == student_id:  # if the expected ID matches
+            try:
+                exec('given_id = ' + LAB_NAME + ".__student_number__.replace(' ', '')")  # imports the student ID
+            except:
+                given_id = None
+                
+            try:
+                exec('given_author = ' + LAB_NAME + ".__author__")
+            except:
+                given_author = None
+
+            if given_id == student_id and given_author is not None:  # if the expected ID matches
                 # Grade lab
                 exec(open(LAB_GRADING_SOFTWARE_NAME).read())
                 score = round(passes / result.testsRun * 10)
 
             else:
                 # possible plagiarism, tell TA to further review
-                exec('given_author = ' + LAB_NAME + ".__author__")
+
                 print('ID doesn\'t match', 'expected:', student_id, ' but received', given_id)
                 print('File Author name:', given_author, '- Expected Author name:', name)
                 print('FURTHER REVIEW REQUIRED')
                 score = -1
-                print('Review student: ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
+                print('Review student (issue with name or ID): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
                       file=original_stderr)
+                print('ID doesn\'t match', 'expected:', student_id, ' but received', given_id,file=original_stderr)
+                print('File Author name:', given_author, '- Expected Author name:', name,file=original_stderr)
+                print(file=original_stderr)
+
+            # else:
+            #     print('ID or author not given, expected ID:', student_id, 'author: ', name)
+            #     score = 0
 
             del sys.modules[LAB_NAME]  # delete the current lab
 
@@ -216,7 +231,11 @@ for folder in folders:
     new_location_read.close()
 
     # Add feedback to students file
-    add_feedback_text(folder, feedback)
+    try:
+        add_feedback_text(folder, feedback)
+    except:
+        print('Review student (odd file format): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'\n',
+              file=original_stderr)
 
 # delete unnecessary files
 os.remove(os.path.abspath(os.getcwd()) + '\\output.txt')
