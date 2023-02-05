@@ -62,34 +62,51 @@ def copy_outside(student_folder: str):
     shutil.copyfile(src_file, dst_file)
 
 
-def add_feedback_text(student_folder: str, specific_feedback: str):
+def add_feedback_text(student_folder: str):
     """move feedback to top of student's submitted file
     """
+    # read the feedback
+    new_location_read = open("output.txt", 'r')
+    specific_feedback = new_location_read.read()
+    new_location_read.close()
 
     # Find student file
     src_file = list(pathlib.Path(os.path.abspath(os.getcwd()) + '\\' + student_folder).glob('*.py'))[0]
     # add # to first line and after every \n
-    specific_feedback = '################### FEEDBACK ############################\n' + \
-                        '# ' + specific_feedback.replace('\n', '\n# ') + \
-                        '\n################### FEEDBACK ############################\n\n'
+    specific_feedback_for_code = '################### FEEDBACK ############################\n' + \
+                                 '# ' + specific_feedback.replace('\n', '\n# ') + \
+                                 '\n################### FEEDBACK ############################\n\n'
     # read python file
-    file = open(src_file, 'r')
-    file_contents = file.read()
-    file.close()
+    cannot_read_original = False
+    try:
+        file = open(src_file, 'r')
+        file_contents = file.read()
+        file.close()
+    except:
+        cannot_read_original = True
+        print(
+            'Review student (odd file encoding format -> feedback saved to seperate feedback.txt file in student\'s folder): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'\n',
+            file=original_stderr)
+    if not cannot_read_original:
+        # Remove previous feedback, if any exists
+        file_contents = file_contents.split('\n################### FEEDBACK ############################\n\n')[-1]
 
-    # Remove previous feedback, if any exists
-    file_contents = file_contents.split('\n################### FEEDBACK ############################\n\n')[-1]
+        # Add feedback
+        new_file_contents = specific_feedback_for_code + file_contents
 
-    # Add feedback
-    new_file_contents = specific_feedback + file_contents
+        # Write to file
+        file = open(src_file, 'w')
+        file.write(new_file_contents)
+        file.close()
+    else:
+        src_file = os.path.abspath(os.getcwd()) + '\\' + student_folder + '\\' + 'feedback.txt'
+        file = open(src_file, 'w')
+        new_file_contents = 'ERROR WRITING TO ORIGINAL CODE, FEEDBACK BELOW:\n\n' + specific_feedback
+        file.write(new_file_contents)
+        file.close()
 
-    # Write to file
-    file = open(src_file, 'w')
-    file.write(new_file_contents)
-    file.close()
 
-
-def parse_name_and_student_id(folder_name: str):
+def parse_name_and_student_id(folder_name: str, fix_order: bool):
     """get name and student id from folder
     """
     split_folder = folder_name.split("- ")
@@ -101,7 +118,8 @@ def parse_name_and_student_id(folder_name: str):
     student_id_part = name_and_id[-9:]
     name_part = name_and_id[:-10]
 
-    name_part = fix_name_order(name_part)
+    if fix_order:
+        name_part = fix_name_order(name_part)
 
     return name_part, student_id_part
 
@@ -132,13 +150,38 @@ def update_file_and_check_syntax():
     return can_mark
 
 
-# noinspection PyPep8Naming
 def save_grade_to_CSV(grades: list, fieldnames: list):
     """Saves list of grades with fieldnames to a csv file"""
     with open(SAVE_GRADES_TO, 'w', encoding='UTF8', newline='') as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(grades)
+
+
+def start_print_to_file():
+    """prints to output file to save all print
+    """
+    write_location = open("output.txt", 'w')
+    sys.stderr = write_location
+    sys.stdout = write_location
+    return write_location
+
+
+def end_print_to_file(write_location):
+    """Ends printing to textfile
+    """
+    write_location.close()
+    sys.stdout = original_stdout
+    sys.stderr = original_stderr
+
+
+def delete_unnecessary_files():
+    """Cleans up folder prior to finish
+    """
+    os.remove(os.path.abspath(os.getcwd()) + '\\output.txt')
+
+    if os.path.exists(os.path.abspath(os.getcwd()) + '\\' + LAB_NAME + '.py'):
+        os.remove(os.path.abspath(os.getcwd()) + '\\' + LAB_NAME + '.py')
 
 
 # main script
@@ -152,12 +195,10 @@ scores = []
 for folder in folders:
 
     # Get name and ID
-    name, student_id = parse_name_and_student_id(folder)
+    name, student_id = parse_name_and_student_id(folder, fix_order=True)
 
     # Start print to file
-    new_location_write = open("output.txt", 'w')
-    sys.stderr = new_location_write
-    sys.stdout = new_location_write
+    new_location_write = start_print_to_file()
 
     print(name)
     print(student_id)
@@ -171,13 +212,14 @@ for folder in folders:
         good_syntax = update_file_and_check_syntax()
 
         if good_syntax:
-            exec('import ' + LAB_NAME)  # imports the students lab
+
+            exec('import ' + LAB_NAME)
 
             try:
                 exec('given_id = ' + LAB_NAME + ".__student_number__.replace(' ', '')")  # imports the student ID
             except:
                 given_id = None
-                
+
             try:
                 exec('given_author = ' + LAB_NAME + ".__author__")
             except:
@@ -189,21 +231,18 @@ for folder in folders:
                 score = round(passes / result.testsRun * 10)
 
             else:
-                # possible plagiarism, tell TA to further review
-
+                # mismatching or missing name/ID, tell TA to further review
                 print('ID doesn\'t match', 'expected:', student_id, ' but received', given_id)
-                print('File Author name:', given_author, '- Expected Author name:', name)
+                print('File Author name:', given_author, '-> Expected Author name:', name)
                 print('FURTHER REVIEW REQUIRED')
-                score = -1
-                print('Review student (issue with name or ID): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
-                      file=original_stderr)
-                print('ID doesn\'t match', 'expected:', student_id, ' but received', given_id,file=original_stderr)
-                print('File Author name:', given_author, '- Expected Author name:', name,file=original_stderr)
+                print(
+                    'Review student (issue with name or ID): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
+                    file=original_stderr)
+                print('File ID#:', given_id, '-> Expected ID#:', student_id, file=original_stderr)
+                print('File Author name:', given_author, '-> Expected Author name:', name, file=original_stderr)
                 print(file=original_stderr)
 
-            # else:
-            #     print('ID or author not given, expected ID:', student_id, 'author: ', name)
-            #     score = 0
+                score = -1  # to highlight student on csv when opened in excel
 
             del sys.modules[LAB_NAME]  # delete the current lab
 
@@ -216,32 +255,18 @@ for folder in folders:
         score = 0
 
     # Close print saving to txt file
-    new_location_write.close()
-    sys.stdout = original_stdout
-    sys.stderr = original_stderr
+    end_print_to_file(new_location_write)
 
     # Add score to dictionary
     scores.append({'Name': name, 'OrgDefinedId': student_id,
                    GRADES_CSV_HEADER: score,
                    "End-of-Line Indicator": '#'})
 
-    # read the feedback
-    new_location_read = open("output.txt", 'r')
-    feedback = new_location_read.read()
-    new_location_read.close()
-
     # Add feedback to students file
-    try:
-        add_feedback_text(folder, feedback)
-    except:
-        print('Review student (odd file format): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'\n',
-              file=original_stderr)
+    add_feedback_text(folder)
 
 # delete unnecessary files
-os.remove(os.path.abspath(os.getcwd()) + '\\output.txt')
-
-if os.path.exists(os.path.abspath(os.getcwd()) + '\\' + LAB_NAME + '.py'):
-    os.remove(os.path.abspath(os.getcwd()) + '\\' + LAB_NAME + '.py')
+delete_unnecessary_files()
 
 # csv header
 field_names = ['Name', 'OrgDefinedId',
