@@ -23,13 +23,12 @@ __email__ = "boazaharony@cmail.carleton.ca"
 __status__ = "Dev"
 
 ########################## CHANGE EVERY LAB ###########################################################################
-LAB_NAME = 'lab4'
+LAB_NAME = 'lab4'  # DO NOT ADD .py
 LAB_GRADING_SOFTWARE_NAME = 'grade_lab_4.py'
 
 SAVE_GRADES_TO = 'Merge ECOR1041EECOR1041FECOR1041GECOR1041H Computation and Programming (LEC) [12024120251202612027] ' \
                  'Winter 2023_Grades.csv '
 GRADES_CSV_HEADER = 'Lab 4 Points Grade <Numeric MaxPoints:10 Weight:16.66666667 Category:Labs CategoryWeight:10>'
-
 ########################## CHANGE EVERY LAB ###########################################################################
 
 # save original print streams
