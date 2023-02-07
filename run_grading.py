@@ -23,14 +23,15 @@ __email__ = "boazaharony@cmail.carleton.ca"
 __status__ = "Dev"
 
 ########################## CHANGE EVERY LAB ###########################################################################
-LAB_NAME = 'lab5'  # DO NOT ADD .py
-LAB_GRADING_SOFTWARE_NAME = 'grade_lab_5.py'
+LAB_NAME = 'lab4'  # DO NOT ADD .py
+LAB_GRADING_SOFTWARE_NAME = 'grade_lab_4.py'
 SAVE_GRADES_TO = 'lab4_Grades.csv'
 GRADES_CSV_HEADER = 'Lab 4 Points Grade <Numeric MaxPoints:10 Weight:16.66666667 Category:Labs CategoryWeight:10>'
 ########################## CHANGE EVERY LAB ###########################################################################
 
 ########################## GENERAL CONDITIONS ###########################################################################
 FIX_NAME_ORDER = True  # make program print first name then last name onto sheet and feedback when set to true
+PRINT_ALL_STUDENTS = True # Prints student that it is currently grading
 ########################## GENERAL CONDITIONS ###########################################################################
 
 # save original print streams
@@ -197,7 +198,10 @@ for folder in folders:
 
     # Get name and ID
     name, student_id = parse_name_and_student_id(folder, fix_order=FIX_NAME_ORDER)
-    print('grading folder', '\''+folder+'\'','.......................')
+
+    if PRINT_ALL_STUDENTS:
+        print('grading folder', '\''+folder+'\'','.......................')
+
     try:  # In case an error is caused here, change print stream back to console
         # Start print to file
         new_location_write = start_print_to_file()
