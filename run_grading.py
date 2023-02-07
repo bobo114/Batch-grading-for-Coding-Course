@@ -195,7 +195,7 @@ scores = []
 for folder in folders:
 
     # Get name and ID
-    name, student_id = parse_name_and_student_id(folder, fix_order=True)
+    name, student_id = parse_name_and_student_id(folder, fix_order=False)
 
     # Start print to file
     new_location_write = start_print_to_file()
