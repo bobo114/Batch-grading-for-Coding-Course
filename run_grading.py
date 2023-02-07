@@ -232,9 +232,13 @@ for folder in folders:
 
             else:
                 # mismatching or missing name/ID, tell TA to further review
-                print('ID doesn\'t match', 'expected:', student_id, ' but received', given_id)
+
+                # add to file
+                print('File ID#:', given_id, '-> Expected ID#:', student_id)
                 print('File Author name:', given_author, '-> Expected Author name:', name)
                 print('FURTHER REVIEW REQUIRED')
+
+                # Tell TA on console
                 print(
                     'Review student (issue with name or ID): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
                     file=original_stderr)
