@@ -198,69 +198,76 @@ for folder in folders:
     # Get name and ID
     name, student_id = parse_name_and_student_id(folder, fix_order=FIX_NAME_ORDER)
 
-    # Start print to file
-    new_location_write = start_print_to_file()
+    try:  # In case an error is caused here, change print stream back to console
+        # Start print to file
+        new_location_write = start_print_to_file()
 
-    print(name)
-    print(student_id)
-    print('\ngrading software summary:')
+        print(name)
+        print(student_id)
+        print('\ngrading software summary:')
 
-    correct_filename = os.path.exists(folder + "/" + LAB_NAME + ".py")
+        correct_filename = os.path.exists(folder + "/" + LAB_NAME + ".py")
 
-    if correct_filename:
+        if correct_filename:
 
-        copy_outside(folder)
-        good_syntax = update_file_and_check_syntax()
+            copy_outside(folder)
+            good_syntax = update_file_and_check_syntax()
 
-        if good_syntax:
+            if good_syntax:
 
-            exec('import ' + LAB_NAME)
+                exec('import ' + LAB_NAME)
 
-            try:
-                exec('given_id = ' + LAB_NAME + ".__student_number__.replace(' ', '')")  # imports the student ID
-            except:
-                given_id = None
+                try:
+                    exec('given_id = ' + LAB_NAME + ".__student_number__.replace(' ', '')")  # imports the student ID
+                except:
+                    given_id = None
 
-            try:
-                exec('given_author = ' + LAB_NAME + ".__author__")
-            except:
-                given_author = None
+                try:
+                    exec('given_author = ' + LAB_NAME + ".__author__")
+                except:
+                    given_author = None
 
-            if given_id == student_id and given_author is not None:  # if the expected ID matches
-                # Grade lab
-                exec(open(LAB_GRADING_SOFTWARE_NAME).read())
-                score = round(passes / result.testsRun * 10)
+                if given_id == student_id and given_author is not None:  # if the expected ID matches
+                    # Grade lab
+                    exec(open(LAB_GRADING_SOFTWARE_NAME).read())
+                    score = round(passes / result.testsRun * 10)
+
+                else:
+                    # mismatching or missing name/ID, tell TA to further review
+
+                    # add to file
+                    print('File ID#:', given_id, '-> Expected ID#:', student_id)
+                    print('File Author name:', given_author, '-> Expected Author name:', name)
+                    print('FURTHER REVIEW REQUIRED')
+
+                    # Tell TA on console
+                    print(
+                        'Review student (issue with name or ID): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
+                        file=original_stderr)
+                    print('File ID#:', given_id, '-> Expected ID#:', student_id, file=original_stderr)
+                    print('File Author name:', given_author, '-> Expected Author name:', name, file=original_stderr)
+                    print(file=original_stderr)
+
+                    score = -1  # to highlight student on csv when opened in excel
+
+                del sys.modules[LAB_NAME]  # delete the current lab
 
             else:
-                # mismatching or missing name/ID, tell TA to further review
-
-                # add to file
-                print('File ID#:', given_id, '-> Expected ID#:', student_id)
-                print('File Author name:', given_author, '-> Expected Author name:', name)
-                print('FURTHER REVIEW REQUIRED')
-
-                # Tell TA on console
-                print(
-                    'Review student (issue with name or ID): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
-                    file=original_stderr)
-                print('File ID#:', given_id, '-> Expected ID#:', student_id, file=original_stderr)
-                print('File Author name:', given_author, '-> Expected Author name:', name, file=original_stderr)
-                print(file=original_stderr)
-
-                score = -1  # to highlight student on csv when opened in excel
-
-            del sys.modules[LAB_NAME]  # delete the current lab
+                score = 0
+                print('Syntax error in code (0/10)')
 
         else:
+            print('wrong file name: (0/10) -> should be ' + LAB_NAME + '.py')
             score = 0
-            print('Syntax error in code (0/10)')
 
-    else:
-        print('wrong file name: (0/10) -> should be ' + LAB_NAME + '.py')
-        score = 0
-
-    # Close print saving to txt file
-    end_print_to_file(new_location_write)
+        # Close print saving to txt file
+        end_print_to_file(new_location_write)
+    except Exception as e:
+        # In case of bug that was not caught
+        sys.stderr = original_stderr
+        print('ERROR, CONTACT', __maintainer__, 'at:', __email__, file=original_stderr)
+        print(e, file=original_stderr)
+        sys.exit("CANNOT CONTINUE GRADING")
 
     # Add score to dictionary
     scores.append({'Name': name, 'OrgDefinedId': student_id,
