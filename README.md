@@ -6,7 +6,7 @@ To use follow these steps:
 1. Download student submissions from brightspace as a batch
 2. add run_grading.py into a folder containing student submission folders
 3. add grading script to folder
-4. rename the strings between line 25 to 32 in the following region  
+4. rename the strings between line 25 to 30 in the following region  
        
        LAB_NAME = 'labX' # DO NOT ADD .py
        LAB_GRADING_SOFTWARE_NAME = 'grade_lab_X.py'
