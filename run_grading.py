@@ -15,6 +15,7 @@ import shutil
 import importlib
 import pathlib
 import csv
+import io
 
 __author__ = "Boaz Aharony"
 __copyright__ = "Copyright 2023, Boaz Aharony"
@@ -23,15 +24,15 @@ __email__ = "boazaharony@cmail.carleton.ca"
 __status__ = "Dev"
 
 ########################## CHANGE EVERY LAB ###########################################################################
-LAB_NAME = 'lab4'  # DO NOT ADD .py
-LAB_GRADING_SOFTWARE_NAME = 'grade_lab_4.py'
-SAVE_GRADES_TO = 'lab4_Grades.csv'
-GRADES_CSV_HEADER = 'Lab 4 Points Grade <Numeric MaxPoints:10 Weight:16.66666667 Category:Labs CategoryWeight:10>'
+LAB_NAME = 'lab5'  # DO NOT ADD .py
+LAB_GRADING_SOFTWARE_NAME = 'grade_lab_5.py'
+SAVE_GRADES_TO = 'lab5_Grades.csv'
+GRADES_CSV_HEADER = 'Lab 5 Points Grade <Numeric MaxPoints:10 Weight:16.66666667 Category:Labs CategoryWeight:10>'
 ########################## CHANGE EVERY LAB ###########################################################################
 
 ########################## GENERAL CONDITIONS ###########################################################################
 FIX_NAME_ORDER = True  # make program print first name then last name onto sheet and feedback when set to true
-PRINT_ALL_STUDENTS = True # Prints student that it is currently grading
+PRINT_ALL_STUDENTS = False  # Prints student that it is currently grading (use if code hangs to find students with infinite loop)
 ########################## GENERAL CONDITIONS ###########################################################################
 
 # save original print streams
@@ -192,7 +193,7 @@ def delete_unnecessary_files():
 folders = listdir()
 filter_folders(folders)
 scores = []
-
+sys.stdin = io.StringIO('?')  # suppress input statements
 # Grade each file
 for folder in folders:
 
