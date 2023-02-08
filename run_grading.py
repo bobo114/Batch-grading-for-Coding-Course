@@ -196,7 +196,6 @@ def delete_unnecessary_files():
 folders = listdir()
 filter_folders(folders)
 scores = []
-sys.stdin = io.StringIO('?')  # suppress input statements
 # Grade each file
 for folder in folders:
 
@@ -259,10 +258,10 @@ for folder in folders:
 
                     except subprocess.TimeoutExpired: # Possible infinite loop
                         score = -1
-                        print('Possible infinite loop in code')
+                        print('Possible infinite loop or input in code')
                         print('FURTHER REVIEW REQUIRED')
                         print(
-                            'Review student (possible infinite loop): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
+                            'Review student (possible infinite loop or input): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
                             file=original_stderr)
                         print(file=original_stderr)
 
