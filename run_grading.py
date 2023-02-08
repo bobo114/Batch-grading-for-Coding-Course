@@ -16,6 +16,7 @@ import importlib
 import pathlib
 import csv
 import io
+import subprocess
 
 __author__ = "Boaz Aharony"
 __copyright__ = "Copyright 2023, Boaz Aharony"
@@ -24,15 +25,16 @@ __email__ = "boazaharony@cmail.carleton.ca"
 __status__ = "Dev"
 
 ########################## CHANGE EVERY LAB ###########################################################################
-LAB_NAME = 'lab5'  # DO NOT ADD .py
-LAB_GRADING_SOFTWARE_NAME = 'grade_lab_5.py'
-SAVE_GRADES_TO = 'lab5_Grades.csv'
-GRADES_CSV_HEADER = 'Lab 5 Points Grade <Numeric MaxPoints:10 Weight:16.66666667 Category:Labs CategoryWeight:10>'
+LAB_NAME = 'lab4'  # DO NOT ADD .py
+LAB_GRADING_SOFTWARE_NAME = 'grade_lab_4.py'
+SAVE_GRADES_TO = 'lab4_Grades.csv'
+GRADES_CSV_HEADER = 'Lab 4 Points Grade <Numeric MaxPoints:10 Weight:16.66666667 Category:Labs CategoryWeight:10>'
 ########################## CHANGE EVERY LAB ###########################################################################
 
 ########################## GENERAL CONDITIONS ###########################################################################
 FIX_NAME_ORDER = True  # make program print first name then last name onto sheet and feedback when set to true
 PRINT_ALL_STUDENTS = False  # Prints student that it is currently grading (use if code hangs to find students with infinite loop)
+TIMEOUT = 2  # set for limiting maximum runtime of a students code check (in seconds)
 ########################## GENERAL CONDITIONS ###########################################################################
 
 # save original print streams
@@ -201,7 +203,7 @@ for folder in folders:
     name, student_id = parse_name_and_student_id(folder, fix_order=FIX_NAME_ORDER)
 
     if PRINT_ALL_STUDENTS:
-        print('grading folder', '\''+folder+'\'','.......................')
+        print('grading folder', '\'' + folder + '\'', '.......................')
 
     try:  # In case an error is caused here, change print stream back to console
         # Start print to file
@@ -234,8 +236,23 @@ for folder in folders:
 
                 if given_id == student_id and given_author is not None:  # if the expected ID matches
                     # Grade lab
-                    exec(open(LAB_GRADING_SOFTWARE_NAME).read())
-                    score = round(passes / result.testsRun * 10)
+                    # TODO: find way to get grade without having to run grading twice per student
+                    try:
+                        # will throw timeout error if exceeds TIMEOUT seconds
+                        time_test = subprocess.run([sys.executable, '-c', open(LAB_GRADING_SOFTWARE_NAME).read()],
+                                                   capture_output=True, text=True, timeout=TIMEOUT)
+
+                        # Continue grading if no error
+                        exec(open(LAB_GRADING_SOFTWARE_NAME).read())
+                        score = round(passes / result.testsRun * 10)
+                    except subprocess.TimeoutExpired:
+                        score = -1
+                        print('Possible infinite loop in code')
+                        print('FURTHER REVIEW REQUIRED')
+                        print(
+                            'Review student (possible infinite loop): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
+                            file=original_stderr)
+                        print(file=original_stderr)
 
                 else:
                     # mismatching or missing name/ID, tell TA to further review
@@ -273,7 +290,7 @@ for folder in folders:
         sys.stderr = original_stderr
         print('ERROR, CONTACT', __maintainer__, 'at:', __email__, file=original_stderr)
         print(e, file=original_stderr)
-        sys.exit("CANNOT CONTINUE GRADING DUE TO STUDENT: "+ name)
+        sys.exit("CANNOT CONTINUE GRADING DUE TO STUDENT: " + name)
 
     # Add score to dictionary
     scores.append({'Name': name, 'OrgDefinedId': student_id,
