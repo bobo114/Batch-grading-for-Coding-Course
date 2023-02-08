@@ -33,7 +33,7 @@ GRADES_CSV_HEADER = 'Lab 4 Points Grade <Numeric MaxPoints:10 Weight:16.66666667
 
 ########################## GENERAL CONDITIONS ###########################################################################
 FIX_NAME_ORDER = True  # make program print first name then last name onto sheet and feedback when set to true
-PRINT_ALL_STUDENTS = False  # Prints student that it is currently grading (use if code hangs to find students with infinite loop)
+PRINT_ALL_STUDENTS = False  # Prints student that it is currently grading (use for debugging)
 TIMEOUT = 2  # set for limiting maximum runtime of a students code check (in seconds)
 SCORE_CODE = 'round(passes / result.testsRun * 10)'  # Code used to calculate score (copy from grading file)
 ########################## GENERAL CONDITIONS ###########################################################################
