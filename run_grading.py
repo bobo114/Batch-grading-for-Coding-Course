@@ -35,6 +35,7 @@ GRADES_CSV_HEADER = 'Lab 4 Points Grade <Numeric MaxPoints:10 Weight:16.66666667
 FIX_NAME_ORDER = True  # make program print first name then last name onto sheet and feedback when set to true
 PRINT_ALL_STUDENTS = False  # Prints student that it is currently grading (use if code hangs to find students with infinite loop)
 TIMEOUT = 2  # set for limiting maximum runtime of a students code check (in seconds)
+SCORE_CODE = 'round(passes / result.testsRun * 10)'  # Code used to calculate score (copy from grading file)
 ########################## GENERAL CONDITIONS ###########################################################################
 
 # save original print streams
@@ -236,16 +237,27 @@ for folder in folders:
 
                 if given_id == student_id and given_author is not None:  # if the expected ID matches
                     # Grade lab
-                    # TODO: find way to get grade without having to run grading twice per student
                     try:
-                        # will throw timeout error if exceeds TIMEOUT seconds
-                        time_test = subprocess.run([sys.executable, '-c', open(LAB_GRADING_SOFTWARE_NAME).read()],
-                                                   capture_output=True, text=True, timeout=TIMEOUT)
 
-                        # Continue grading if no error
-                        exec(open(LAB_GRADING_SOFTWARE_NAME).read())
-                        score = round(passes / result.testsRun * 10)
-                    except subprocess.TimeoutExpired:
+                        # Slightly modify the grading file
+                        code = 'import sys\n' \
+                               'sys.stderr = sys.stdout\n'\
+                               + open(LAB_GRADING_SOFTWARE_NAME).read() + '\n'\
+                               + 'print(' + SCORE_CODE + ', end=\'\')'
+
+                        # will throw timeout error if exceeds TIMEOUT seconds
+                        result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=TIMEOUT)
+
+                        # Split code output
+                        output = result.stdout.split('\n')
+
+                        # get score
+                        score = float(output[-1])
+
+                        # Add the rest to the feedback
+                        print('\n'.join(output[:-1]))
+
+                    except subprocess.TimeoutExpired: # Possible infinite loop
                         score = -1
                         print('Possible infinite loop in code')
                         print('FURTHER REVIEW REQUIRED')
