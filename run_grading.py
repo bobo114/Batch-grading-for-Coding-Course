@@ -8,14 +8,12 @@ Any erroneous submissions will be reported in the console as error to the user a
 and folder name
 """
 
-from os import listdir, system
+from os import listdir
 import sys
 import os
 import shutil
-import importlib
 import pathlib
 import csv
-import io
 import subprocess
 
 __author__ = "Boaz Aharony"
@@ -145,17 +143,6 @@ def fix_name_order(name_part: str):
     return name_part
 
 
-def update_file_and_check_syntax():
-    """update file in cache to new file in folder and check that it works
-    """
-    can_mark = True
-    try:
-        exec('import ' + LAB_NAME)
-    except:
-        can_mark = False
-    return can_mark
-
-
 def save_grade_to_CSV(grades: list, fieldnames: list):
     """Saves list of grades with fieldnames to a csv file"""
     with open(SAVE_GRADES_TO, 'w', encoding='UTF8', newline='') as f:
@@ -190,6 +177,33 @@ def delete_unnecessary_files():
         os.remove(os.path.abspath(os.getcwd()) + '\\' + LAB_NAME + '.py')
 
 
+def get_id_and_author():
+    """Returns the current name and id of the lab, 'syntaxError' if the file can't run
+    and 'TimeoutExpired' if the file takes too long to load
+    """
+    name_exist_check_code = 'import ' + LAB_NAME + '\n' + \
+                            'if hasattr(' + LAB_NAME + ', \'__student_number__\'):\n' \
+                                                       '\tprint(' + LAB_NAME + '.__student_number__)\n' \
+                                                                               'else:\n' \
+                                                                               '\tprint(\'missing\')\n\n' \
+                                                                               'if hasattr(' + LAB_NAME + ', \'__author__\'):\n' \
+                                                                                                          '\tprint(' + LAB_NAME + '.__author__)\n' \
+                                                                                                                                  'else:\n' \
+                                                                                                                                  '\tprint(\'missing\')'
+    try:
+        name_and_id_check = subprocess.run([sys.executable, '-c', name_exist_check_code], capture_output=True,
+                                           text=True, timeout=TIMEOUT)
+        if name_and_id_check.stderr != '':
+            return 'syntaxError', 'syntaxError'
+        name_and_id_exist = name_and_id_check.stdout.split('\n')
+        given_name = name_and_id_exist[-2]
+        given_number = name_and_id_exist[-3].replace(' ', '')
+    except subprocess.TimeoutExpired:  # Possible infinite loop
+        return 'TimeoutExpired', 'TimeoutExpired'
+
+    return given_number, given_name
+
+
 # main script
 
 # Get student folder list
@@ -218,34 +232,34 @@ for folder in folders:
         if correct_filename:
 
             copy_outside(folder)
-            good_syntax = update_file_and_check_syntax()
+
+            # Get ID and name, check if this causes issues
+            given_id, given_author = get_id_and_author()
+            if given_id == 'TimeoutExpired' and given_author == 'TimeoutExpired':
+                infinite_loop = True
+            else:
+                infinite_loop = False
+
+            if given_id == 'syntaxError' and given_author == 'syntaxError':
+                good_syntax = False
+            else:
+                good_syntax = True
 
             if good_syntax:
 
-                exec('import ' + LAB_NAME)
-
-                try:
-                    exec('given_id = ' + LAB_NAME + ".__student_number__.replace(' ', '')")  # imports the student ID
-                except:
-                    given_id = None
-
-                try:
-                    exec('given_author = ' + LAB_NAME + ".__author__")
-                except:
-                    given_author = None
-
-                if given_id == student_id and given_author is not None:  # if the expected ID matches
+                if given_id == student_id and given_author != 'missing' and not infinite_loop:  # if the expected ID matches
                     # Grade lab
                     try:
 
                         # Slightly modify the grading file
                         code = 'import sys\n' \
-                               'sys.stderr = sys.stdout\n'\
-                               + open(LAB_GRADING_SOFTWARE_NAME).read() + '\n'\
+                               'sys.stderr = sys.stdout\n' \
+                               + open(LAB_GRADING_SOFTWARE_NAME).read() + '\n' \
                                + 'print(' + SCORE_CODE + ', end=\'\')'
 
                         # will throw timeout error if exceeds TIMEOUT seconds
-                        result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True, timeout=TIMEOUT)
+                        result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True,
+                                                timeout=TIMEOUT)
 
                         # Split code output
                         output = result.stdout.split('\n')
@@ -256,7 +270,7 @@ for folder in folders:
                         # Add the rest to the feedback
                         print('\n'.join(output[:-1]))
 
-                    except subprocess.TimeoutExpired: # Possible infinite loop
+                    except subprocess.TimeoutExpired:  # Possible infinite loop
                         score = -1
                         print('Possible infinite loop or input in code')
                         print('FURTHER REVIEW REQUIRED')
@@ -264,7 +278,14 @@ for folder in folders:
                             'Review student (possible infinite loop or input): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
                             file=original_stderr)
                         print(file=original_stderr)
-
+                elif infinite_loop:
+                    score = -1
+                    print('Possible infinite loop or input in code')
+                    print('FURTHER REVIEW REQUIRED')
+                    print(
+                        'Review student (possible infinite loop or input): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
+                        file=original_stderr)
+                    print(file=original_stderr)
                 else:
                     # mismatching or missing name/ID, tell TA to further review
 
@@ -282,8 +303,6 @@ for folder in folders:
                     print(file=original_stderr)
 
                     score = -1  # to highlight student on csv when opened in excel
-
-                del sys.modules[LAB_NAME]  # delete the current lab
 
             else:
                 score = 0
