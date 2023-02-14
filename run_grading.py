@@ -183,13 +183,13 @@ def get_id_and_author():
     """
     name_exist_check_code = 'import ' + LAB_NAME + '\n' + \
                             'if hasattr(' + LAB_NAME + ', \'__student_number__\'):\n' \
-                                                       '\tprint(' + LAB_NAME + '.__student_number__)\n' \
-                                                                               'else:\n' \
-                                                                               '\tprint(\'missing\')\n\n' \
-                                                                               'if hasattr(' + LAB_NAME + ', \'__author__\'):\n' \
-                                                                                                          '\tprint(' + LAB_NAME + '.__author__)\n' \
-                                                                                                                                  'else:\n' \
-                                                                                                                                  '\tprint(\'missing\')'
+                            '\tprint(' + LAB_NAME + '.__student_number__)\n' \
+                            'else:\n' \
+                            '\tprint(\'missing\')\n\n' \
+                            'if hasattr(' + LAB_NAME + ', \'__author__\'):\n' \
+                            '\tprint(' + LAB_NAME + '.__author__)\n' \
+                            'else:\n' \
+                            '\tprint(\'missing\')'
     try:
         name_and_id_check = subprocess.run([sys.executable, '-c', name_exist_check_code], capture_output=True,
                                            text=True, timeout=TIMEOUT)
@@ -202,6 +202,65 @@ def get_id_and_author():
         return 'TimeoutExpired', 'TimeoutExpired'
 
     return given_number, given_name
+
+
+def grade():
+    """
+    Runs the grading script on the student's code
+    """
+    try:
+
+        # Slightly modify the grading file
+        code = 'import sys\n' \
+               'sys.stderr = sys.stdout\n' \
+               + open(LAB_GRADING_SOFTWARE_NAME).read() + '\n' \
+               + 'print(' + SCORE_CODE + ', end=\'\')'
+
+        # will throw timeout error if exceeds TIMEOUT seconds
+        result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True,
+                                timeout=TIMEOUT)
+
+        # Split code output
+        output = result.stdout.split('\n')
+
+        # get score
+        gscore = float(output[-1])
+
+        # Add the rest to the feedback
+        print('\n'.join(output[:-1]))
+
+    except subprocess.TimeoutExpired:  # Possible infinite loop
+        gscore = -1  # to highlight student on csv when opened in excel
+        infinite_loop_prints()
+    return gscore  # named gscore to not interfere with score
+
+
+def mismatching_name_prints():
+    """Prints necessary mismatching name actions
+    """
+    # add to file
+    print('File ID#:', given_id, '-> Expected ID#:', student_id)
+    print('File Author name:', given_author, '-> Expected Author name:', name)
+    print('FURTHER REVIEW REQUIRED')
+
+    # Tell TA on console
+    print(
+        'Review student (issue with name or ID): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
+        file=original_stderr)
+    print('File ID#:', given_id, '-> Expected ID#:', student_id, file=original_stderr)
+    print('File Author name:', given_author, '-> Expected Author name:', name, file=original_stderr)
+    print(file=original_stderr)
+
+
+def infinite_loop_prints():
+    """Prints necessary infinite loop actions
+    """
+    print('Possible infinite loop or input in code')
+    print('FURTHER REVIEW REQUIRED')
+    print(
+        'Review student (possible infinite loop or input): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
+        file=original_stderr)
+    print(file=original_stderr)
 
 
 # main script
@@ -235,82 +294,31 @@ for folder in folders:
 
             # Get ID and name, check if this causes issues
             given_id, given_author = get_id_and_author()
-            if given_id == 'TimeoutExpired' and given_author == 'TimeoutExpired':
-                infinite_loop = True
-            else:
-                infinite_loop = False
 
-            if given_id == 'syntaxError' and given_author == 'syntaxError':
-                good_syntax = False
-            else:
-                good_syntax = True
+            # Check for errors
+            infinite_loop = given_id == 'TimeoutExpired' and given_author == 'TimeoutExpired'
+            syntax_error = given_id == 'syntaxError' and given_author == 'syntaxError'
+            name_on_file_incorrect = not (given_id == student_id and given_author != 'missing')
 
-            if good_syntax:
+            # Act on errors if any, otherwise grade
+            if infinite_loop:
+                score = -1
+                infinite_loop_prints()
 
-                if given_id == student_id and given_author != 'missing' and not infinite_loop:  # if the expected ID matches
-                    # Grade lab
-                    try:
-
-                        # Slightly modify the grading file
-                        code = 'import sys\n' \
-                               'sys.stderr = sys.stdout\n' \
-                               + open(LAB_GRADING_SOFTWARE_NAME).read() + '\n' \
-                               + 'print(' + SCORE_CODE + ', end=\'\')'
-
-                        # will throw timeout error if exceeds TIMEOUT seconds
-                        result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True,
-                                                timeout=TIMEOUT)
-
-                        # Split code output
-                        output = result.stdout.split('\n')
-
-                        # get score
-                        score = float(output[-1])
-
-                        # Add the rest to the feedback
-                        print('\n'.join(output[:-1]))
-
-                    except subprocess.TimeoutExpired:  # Possible infinite loop
-                        score = -1
-                        print('Possible infinite loop or input in code')
-                        print('FURTHER REVIEW REQUIRED')
-                        print(
-                            'Review student (possible infinite loop or input): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
-                            file=original_stderr)
-                        print(file=original_stderr)
-                elif infinite_loop:
-                    score = -1
-                    print('Possible infinite loop or input in code')
-                    print('FURTHER REVIEW REQUIRED')
-                    print(
-                        'Review student (possible infinite loop or input): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
-                        file=original_stderr)
-                    print(file=original_stderr)
-                else:
-                    # mismatching or missing name/ID, tell TA to further review
-
-                    # add to file
-                    print('File ID#:', given_id, '-> Expected ID#:', student_id)
-                    print('File Author name:', given_author, '-> Expected Author name:', name)
-                    print('FURTHER REVIEW REQUIRED')
-
-                    # Tell TA on console
-                    print(
-                        'Review student (issue with name or ID): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
-                        file=original_stderr)
-                    print('File ID#:', given_id, '-> Expected ID#:', student_id, file=original_stderr)
-                    print('File Author name:', given_author, '-> Expected Author name:', name, file=original_stderr)
-                    print(file=original_stderr)
-
-                    score = -1  # to highlight student on csv when opened in excel
-
-            else:
+            elif syntax_error:
                 score = 0
                 print('Syntax error in code (0/10)')
 
+            elif name_on_file_incorrect:
+                score = -1
+                mismatching_name_prints()
+            else:
+                score = grade()
+
         else:
-            print('wrong file name: (0/10) -> should be ' + LAB_NAME + '.py')
             score = 0
+            print('wrong file name: (0/10) -> should be ' + LAB_NAME + '.py')
+
 
         # Close print saving to txt file
         end_print_to_file(new_location_write)
