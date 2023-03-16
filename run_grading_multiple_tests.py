@@ -47,15 +47,17 @@ GRADING_MATERIAL_LOCATION = 'grading material'
 FEEDBACK_ZIP_FOLDER_NAME = 'feedback for brightspace'
 ########################## GENERAL CONDITIONS ###########################################################################
 
-# save original print streams
-original_stdout = sys.stdout
-original_stderr = sys.stderr
+# Constants
+INDEX_FILE_NAME = 'index.html'
 
+# save original print streams
+original_stderr = sys.stderr
 
 
 def filter_folders(folder_list: str):
     pattern = re.compile(r'^\d+-\d')
     return list(filter(pattern.match, folder_list))
+
 
 def copy_outside(student_folder: str, file_to_copy: str):
     """Copy lab folder outside
@@ -112,7 +114,6 @@ def add_feedback_text(student_folder: str, specific_feedback: str, file_name: st
         file.write(new_file_contents)
         file.close()
         delete_files([src_file])
-
 
 
 def rename_file(file_path, new_name):
@@ -394,7 +395,7 @@ def delete_files_except(directory_path: str, keep_files: list):
             os.remove(file_path)
 
 
-def zip_folders(folder_names: list, zip_name: str):
+def zip_folders(folder_names: list, zip_name: str, root_files: list = None):
     if not zip_name.endswith('.zip'):
         zip_name += '.zip'
     zip_path = os.path.join(os.getcwd(), zip_name)
@@ -408,10 +409,12 @@ def zip_folders(folder_names: list, zip_name: str):
                         rel_path = os.path.relpath(file_path, folder_path)
                         zipf.write(file_path, os.path.join(folder_name, rel_path))
                 shutil.rmtree(folder_path)
-
-
-
-
+        if root_files:
+            for file in root_files:
+                if os.path.isfile(file):
+                    zipf.write(file, os.path.basename(file))
+                    os.remove(file)
+    return zip_path
 
 
 # main script
@@ -434,13 +437,13 @@ for folder in folders:
     name, student_id = parse_name_and_student_id(folder, fix_order=FIX_NAME_ORDER)
 
     try:  # In case an error is caused here, let marker know the student who caused it
-        files = list_files(folder) # list of files in student folder
-        py_files_without_extension = filter_py_files(files) # python files without their extension
+        files = list_files(folder)  # list of files in student folder
+        py_files_without_extension = filter_py_files(files)  # python files without their extension
 
         # Begin writing feedback
-        feedback_for_student = name + '\n'\
-         + student_id + '\n'\
-         + '\ngrading software summary:' + '\n'
+        feedback_for_student = name + '\n' \
+                               + student_id + '\n' \
+                               + '\ngrading software summary:' + '\n'
 
         try:
             file_to_grade = check_list_for_matching_key(py_files_without_extension)
@@ -473,7 +476,7 @@ for folder in folders:
                 feedback_for_student += 'Syntax error in code (0/10)' + '\n'
             elif name_on_file_missing:
                 score = 0
-                feedback_for_student += 'No name or student ID in code (0/10)\n'+\
+                feedback_for_student += 'No name or student ID in code (0/10)\n' + \
                                         'You must define __author__ and __student_number__ !!\n'
             elif name_on_file_incorrect:
                 score = -1
@@ -494,7 +497,8 @@ for folder in folders:
     except Exception as e:
         # In case of bug that was not caught
 
-        print('ERROR, CONTACT', __maintainer__, 'at:', __email__,'\nDO NOT ATTEMPT TO GRADE AGAIN WITHOUT DELETING AND RECOPYING STUDENT FOLDERS', file=original_stderr)
+        print('ERROR, CONTACT', __maintainer__, 'at:', __email__,
+              '\nDO NOT ATTEMPT TO GRADE AGAIN WITHOUT DELETING AND RECOPYING STUDENT FOLDERS', file=original_stderr)
         print(e, file=original_stderr)
 
         # reset the grading folder
@@ -513,7 +517,7 @@ for folder in folders:
     add_feedback_text(folder, feedback_for_student, file_to_grade)
 
 print('Done grading, Saving feedback to zip folder')
-zip_folders(folders, FEEDBACK_ZIP_FOLDER_NAME)
+zip_folders(folders, FEEDBACK_ZIP_FOLDER_NAME, [INDEX_FILE_NAME])
 # csv header
 field_names = ['Name', 'OrgDefinedId',
                GRADES_CSV_HEADER,
