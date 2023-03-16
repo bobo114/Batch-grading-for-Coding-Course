@@ -1,6 +1,12 @@
 """
 ECOR 1041/1042 batch grading file, easily modifiable to the individual lab grading files created by course instructors
 
+This version is also capable of running different tests based on the file submitted. There MUST be a grading material
+folder with tests, and each possible function must have a test for it made.
+
+THIS CODE SHOULD NOT BE RUN MORE THAN ONCE as it may give students a 0 on the second run. If a rerun is necessary
+replace all student folders with the original student folders. Otherwise files are renamed for feedback purposes.
+
 Designed to add feedback to each students file based on grading file output. Checks for matching student numbers based
 on D2L brightspace format. Lastly will create a CSV document in D2L format to upload student grades.
 
@@ -8,13 +14,12 @@ Any erroneous submissions will be reported in the console as error to the user a
 and folder name
 """
 
-from os import listdir
-import sys
+import csv
 import os
 import shutil
-import pathlib
-import csv
 import subprocess
+import sys
+from os import listdir
 
 __author__ = "Boaz Aharony"
 __copyright__ = "Copyright 2023, Boaz Aharony"
@@ -23,21 +28,19 @@ __email__ = "boazaharony@cmail.carleton.ca"
 __status__ = "Dev"
 
 ########################## CHANGE EVERY LAB ###########################################################################
-# LAB_NAME = 'lab4'  # DO NOT ADD .py
-# LAB_GRADING_SOFTWARE_NAME = 'grade_lab_4.py'
 LAB_NAME_GRADING_SOFTWARE_INDEX = {'student_age_list': 'student_age_list_test',
                                    'student_failures_list': 'student_failures_list_test',
                                    'student_health_list': 'student_health_list_test',
-                                   'student_school_list':'student_school_list_test'}  # Add lab name, and its associated grading software, DO NOT ADD .py
-SAVE_GRADES_TO = 'lab4_Grades.csv'
-GRADES_CSV_HEADER = 'Lab 4 Points Grade <Numeric MaxPoints:10 Weight:16.66666667 Category:Labs CategoryWeight:10>'
+                                   'student_school_list': 'student_school_list_test'}  # Add lab name, and its associated grading software, DO NOT ADD .py
+SAVE_GRADES_TO = 'labx_Grades.csv'
+GRADES_CSV_HEADER = 'Lab x Points Grade <Numeric MaxPoints:10 Weight:16.66666667 Category:Labs CategoryWeight:10>'
 ########################## CHANGE EVERY LAB ###########################################################################
 
 ########################## GENERAL CONDITIONS ###########################################################################
 FIX_NAME_ORDER = True  # make program print first name then last name onto sheet and feedback when set to true
-PRINT_ALL_STUDENTS = True  # Prints student that it is currently grading (use for debugging)
+PRINT_ALL_STUDENTS = False  # Prints student that it is currently grading (use for debugging)
 TIMEOUT = 2  # set for limiting maximum runtime of a students code check (in seconds)
-SCORE_CODE = 'round(passes / result.testsRun * 10)'  # Code used to calculate score (copy from grading file)
+SCORE_CODE = 'round(passes / result.testsRun * 4, 2)'  # Code used to calculate score (copy from grading file)
 GRADING_MATERIAL_LOCATION = 'grading material'
 ########################## GENERAL CONDITIONS ###########################################################################
 
@@ -76,7 +79,7 @@ def add_feedback_text(student_folder: str, specific_feedback: str, file_name: st
     """
 
     # Find student file
-    src_file = os.path.join(os.getcwd(),  student_folder + '\\' + file_name+'.py')
+    src_file = os.path.join(os.getcwd(), student_folder + '\\' + file_name + '.py')
 
     # add # to first line and after every \n
     specific_feedback_for_code = '################### FEEDBACK ############################\n' + \
@@ -94,9 +97,6 @@ def add_feedback_text(student_folder: str, specific_feedback: str, file_name: st
             'Review student (odd file encoding format -> feedback saved to seperate feedback.txt file in student\'s folder): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'\n',
             file=original_stderr)
     if not cannot_read_original:
-        # Remove previous feedback, if any exists
-        file_contents = file_contents.split('\n################### FEEDBACK ############################\n\n')[-1]
-
         # Add feedback
         new_file_contents = specific_feedback_for_code + file_contents
 
@@ -104,19 +104,50 @@ def add_feedback_text(student_folder: str, specific_feedback: str, file_name: st
         file = open(src_file, 'w')
         file.write(new_file_contents)
         file.close()
+        rename_file(src_file, 'FEEDBACK_' + file_name + '.py')
+
     else:
         src_file = os.path.abspath(os.getcwd()) + '\\' + student_folder + '\\' + 'feedback.txt'
         file = open(src_file, 'w')
         new_file_contents = 'ERROR WRITING TO ORIGINAL CODE, FEEDBACK BELOW:\n\n' + specific_feedback
         file.write(new_file_contents)
         file.close()
+        delete_files([src_file])
+
+
+
+def rename_file(file_path, new_name):
+    """
+    Rename the file at the given file path with the new name.
+
+    Args:
+    file_path (str): The file path.
+    new_name (str): The new name for the file.
+
+    Returns:
+    bool: True if the file was renamed successfully, False otherwise.
+    """
+    try:
+        # Get the directory and the current name of the file
+        directory = os.path.dirname(file_path)
+        current_name = os.path.basename(file_path)
+
+        # Generate the new file path with the new name
+        new_path = os.path.join(directory, new_name)
+
+        # Rename the file
+        os.rename(file_path, new_path)
+
+        return True
+    except Exception as e:
+        print("Error renaming file:", e)
+        return False
 
 
 def parse_name_and_student_id(folder_name: str, fix_order: bool):
     """get name and student id from folder
     """
     split_folder = folder_name.split("- ")
-    print(split_folder)
     split_folder_dash_correction = len(split_folder)
     if split_folder_dash_correction == 3:
         name_and_id = split_folder[1]
@@ -152,34 +183,6 @@ def save_grade_to_CSV(grades: list, fieldnames: list):
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(grades)
-
-
-def start_print_to_file():
-    """prints to output file to save all print
-    """
-    write_location = open("output.txt", 'w')
-    sys.stderr = write_location
-    sys.stdout = write_location
-    return write_location
-
-
-def end_print_to_file(write_location):
-    """Ends printing to textfile
-    """
-    write_location.close()
-    sys.stdout = original_stdout
-    sys.stderr = original_stderr
-
-
-def delete_unnecessary_files():
-    """Cleans up folder prior to finish
-    """
-    os.remove(os.path.abspath(os.getcwd()) + '\\output.txt')
-
-    # TODO remove files from grading folder
-
-    # if os.path.exists(os.path.abspath(os.getcwd()) + '\\' + LAB_NAME + '.py'):
-    #     os.remove(os.path.abspath(os.getcwd()) + '\\' + LAB_NAME + '.py')
 
 
 def get_id_and_author(lab_name: str):
@@ -237,6 +240,7 @@ def grade(lab_grading_software_name: str):
     except subprocess.TimeoutExpired:  # Possible infinite loop
         gscore = -1  # to highlight student on csv when opened in excel
         feedback_for_file = infinite_loop_prints()
+    print(output[-1]) #FIXME
     return gscore, feedback_for_file  # named gscore to not interfere with score
 
 
@@ -245,7 +249,7 @@ def mismatching_name_prints():
     """
     # add to file
     feedback_for_file = 'File ID#:' + given_id + '-> Expected ID#:' + student_id + '\n'
-    feedback_for_file += 'File Author name:' + given_author + '-> Expected Author name:' + name +'\n'
+    feedback_for_file += 'File Author name:' + given_author + '-> Expected Author name:' + name + '\n'
     feedback_for_file += 'FURTHER REVIEW REQUIRED' + '\n'
 
     # Tell TA on console
@@ -311,19 +315,6 @@ def check_list_for_matching_key(lst: list):
                 raise ValueError("More than one element matches a key in the dictionary.")
             matching_element = element
     return matching_element
-
-
-def copy_files_to_grading_folder(file_list):
-    """
-    Copies the files in the given list to a folder with the name of
-    the global constant GRADING_MATERIAL_LOCATION that is located
-    in the same directory as the script.
-    """
-    script_directory = os.path.dirname(os.path.realpath(__file__))
-    grading_folder_path = os.path.join(script_directory, GRADING_MATERIAL_LOCATION)
-    os.makedirs(grading_folder_path, exist_ok=True)
-    for file in file_list:
-        shutil.copy2(file, grading_folder_path)
 
 
 def filter_py_files(file_list):
@@ -406,77 +397,74 @@ def delete_files(file_names):
 folders = listdir()
 filter_folders(folders)
 scores = []
+
 # Grade each file
-for folder in folders.copy():
+for folder in folders:
 
     # Get name and ID
     if PRINT_ALL_STUDENTS:
         print('grading folder', '\'' + folder + '\'', '.......................')
     name, student_id = parse_name_and_student_id(folder, fix_order=FIX_NAME_ORDER)
 
+    try:  # In case an error is caused here, let marker know the student who caused it
+        files = list_files(folder) # list of files in student folder
+        py_files_without_extension = filter_py_files(files) # python files without their extension
 
+        # Begin writing feedback
+        feedback_for_student = name + '\n'\
+         + student_id + '\n'\
+         + '\ngrading software summary:' + '\n'
 
-# try:  # In case an error is caused here, change print stream back to console
-    files = list_files(folder)
-    py_files_without_extension = filter_py_files(files)
+        try:
+            file_to_grade = check_list_for_matching_key(py_files_without_extension)
+        except ValueError:
+            feedback_for_student += more_then_one_file_prints() + '\n'
+            continue
 
+        if file_to_grade is not None:
 
-    feedback_for_student = name + '\n'
-    feedback_for_student += student_id + '\n'
-    feedback_for_student += '\ngrading software summary:' + '\n'
+            files_copied = copy_files_to_grading_folder(folder)
 
-    try:
-        file_to_grade = check_list_for_matching_key(py_files_without_extension)
-    except ValueError:
-        feedback_for_student += more_then_one_file_prints() + '\n'
-        continue
+            # Get ID and name, check if this causes issues
+            original_dir = change_to_grading_dir()
+            given_id, given_author = get_id_and_author(file_to_grade)
 
-    if file_to_grade is not None:
+            # Check for errors
+            infinite_loop = given_id == 'TimeoutExpired' and given_author == 'TimeoutExpired'
+            syntax_error = given_id == 'syntaxError' and given_author == 'syntaxError'
+            name_on_file_incorrect = not (given_id == student_id and given_author != 'missing')
 
-        files_copied = copy_files_to_grading_folder(folder)
+            # Act on errors if any, otherwise grade
+            if infinite_loop:
+                score = -1
+                feedback_for_student += infinite_loop_prints() + '\n'
 
-        # Get ID and name, check if this causes issues
-        original_dir = change_to_grading_dir()
-        given_id, given_author = get_id_and_author(file_to_grade)  # TODO from here
+            elif syntax_error:
+                score = 0
+                feedback_for_student += 'Syntax error in code (0/10)' + '\n'
 
-        # Check for errors
-        infinite_loop = given_id == 'TimeoutExpired' and given_author == 'TimeoutExpired'
-        syntax_error = given_id == 'syntaxError' and given_author == 'syntaxError'
-        name_on_file_incorrect = not (given_id == student_id and given_author != 'missing')
+            elif name_on_file_incorrect:
+                score = -1
+                feedback_for_student += mismatching_name_prints() + '\n'
+            else:
+                score, feedback_addition = grade(LAB_NAME_GRADING_SOFTWARE_INDEX[file_to_grade] + '.py')
+                feedback_for_student += feedback_addition
 
-        # Act on errors if any, otherwise grade
-        if infinite_loop:
-            score = -1
-            feedback_for_student += infinite_loop_prints() + '\n'
+            delete_files(files)
+            os.chdir(original_dir)  # change back to the outside folder
 
-        elif syntax_error:
-            score = 0
-            feedback_for_student += 'Syntax error in code (0/10)' + '\n'
-
-        elif name_on_file_incorrect:
-            score = -1
-            feedback_for_student += mismatching_name_prints() + '\n'
         else:
-            score, feedback_addition = grade(LAB_NAME_GRADING_SOFTWARE_INDEX[file_to_grade]+'.py')
-            feedback_for_student += feedback_addition
+            score = 0
+            feedback_for_student = 'wrong file name: (0/10) -> should be ' + format_keys_dict(
+                LAB_NAME_GRADING_SOFTWARE_INDEX) + '.py' + '\n'
+            file_to_grade = py_files_without_extension[0] + '.py'
 
-        delete_files(files)
-        os.chdir(original_dir)  # change back to the outside folder
-
-    else:
-        score = 0
-        feedback_for_student = 'wrong file name: (0/10) -> should be ' + format_keys_dict(LAB_NAME_GRADING_SOFTWARE_INDEX) + '.py' +'\n'
-        file_to_grade = py_files_without_extension[0]+'.py'
-
-    # Close print saving to txt file
-    # end_print_to_file(new_location_write)
-
-    # except Exception as e:
-    #     # In case of bug that was not caught
-    #     sys.stderr = original_stderr
-    #     print('ERROR, CONTACT', __maintainer__, 'at:', __email__, file=original_stderr)
-    #     print(e, file=original_stderr)
-    #     sys.exit("CANNOT CONTINUE GRADING DUE TO STUDENT: " + name)
+    except Exception as e:
+        # In case of bug that was not caught
+        sys.stderr = original_stderr
+        print('ERROR, CONTACT', __maintainer__, 'at:', __email__, file=original_stderr)
+        print(e, file=original_stderr)
+        sys.exit("CANNOT CONTINUE GRADING DUE TO STUDENT: " + name)
 
     # Add score to dictionary
     scores.append({'Name': name, 'OrgDefinedId': student_id,
@@ -485,7 +473,6 @@ for folder in folders.copy():
 
     # Add feedback to students file
     add_feedback_text(folder, feedback_for_student, file_to_grade)
-
 
 # csv header
 field_names = ['Name', 'OrgDefinedId',
