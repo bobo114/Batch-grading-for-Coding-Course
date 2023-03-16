@@ -20,6 +20,8 @@ import shutil
 import subprocess
 import sys
 from os import listdir
+import re
+import zipfile
 
 __author__ = "Boaz Aharony"
 __copyright__ = "Copyright 2023, Boaz Aharony"
@@ -42,6 +44,7 @@ PRINT_ALL_STUDENTS = False  # Prints student that it is currently grading (use f
 TIMEOUT = 2  # set for limiting maximum runtime of a students code check (in seconds)
 SCORE_CODE = 'round(passes / result.testsRun * 4, 2)'  # Code used to calculate score (copy from grading file)
 GRADING_MATERIAL_LOCATION = 'grading material'
+FEEDBACK_ZIP_FOLDER_NAME = 'feedback for brightspace'
 ########################## GENERAL CONDITIONS ###########################################################################
 
 # save original print streams
@@ -49,14 +52,10 @@ original_stdout = sys.stdout
 original_stderr = sys.stderr
 
 
-def filter_folders(names: list):
-    """Filters given folder name list to only folders formatted as student downloads
-    """
-    temp_names = names.copy()
-    for filename in temp_names:
-        if not ('0' <= filename[0] <= '9'):
-            names.remove(filename)
 
+def filter_folders(folder_list: str):
+    pattern = re.compile(r'^\d+-\d')
+    return list(filter(pattern.match, folder_list))
 
 def copy_outside(student_folder: str, file_to_copy: str):
     """Copy lab folder outside
@@ -240,7 +239,6 @@ def grade(lab_grading_software_name: str):
     except subprocess.TimeoutExpired:  # Possible infinite loop
         gscore = -1  # to highlight student on csv when opened in excel
         feedback_for_file = infinite_loop_prints()
-    print(output[-1]) #FIXME
     return gscore, feedback_for_file  # named gscore to not interfere with score
 
 
@@ -286,7 +284,7 @@ def more_then_one_file_prints():
     return feedback_for_file
 
 
-def list_files(directory):
+def list_files(directory: str):
     """
     Returns a list of all the files held in a given directory
     that is contained in the same folder as the script is in.
@@ -317,7 +315,7 @@ def check_list_for_matching_key(lst: list):
     return matching_element
 
 
-def filter_py_files(file_list):
+def filter_py_files(file_list: list):
     """
     Given a list of strings, return a new list containing only those strings
     that end with '.py', with the '.py' extension removed.
@@ -329,7 +327,7 @@ def filter_py_files(file_list):
     return filtered_list
 
 
-def copy_files_to_grading_folder(folder_name):
+def copy_files_to_grading_folder(folder_name: str):
     """
     Given a folder name, copy all files in that folder to a new folder
     named 'GRADING_MATERIAL_LOCATION' in the same directory as the original folder.
@@ -353,7 +351,7 @@ def copy_files_to_grading_folder(folder_name):
             shutil.copyfile(source_path, destination_path)
 
 
-def format_keys_dict(d):
+def format_keys_dict(d: dict):
     """
     Takes a dictionary and returns all keys in a string with a seperation of ', ' between each key,
     with the space between the last and second last key being 'or', and to return just the string of the one key if only one key exists.
@@ -371,15 +369,13 @@ def format_keys_dict(d):
         return f"{other_keys}, or {last_key}"
 
 
-def change_to_grading_dir():
+def change_to_grading_dir(current_dir: str):
     """Change the current working directory to the directory specified by the global constant GRADING_MATERIAL_LOCATION."""
-    current_dir = os.getcwd()
     new_dir = os.path.join(current_dir, GRADING_MATERIAL_LOCATION)
     os.chdir(new_dir)
-    return current_dir
 
 
-def delete_files(file_names):
+def delete_files(file_names: list):
     """
     Deletes all files with the names specified in a list from the current working directory.
     Throws an error if a file name from the list is not found in the directory.
@@ -391,13 +387,44 @@ def delete_files(file_names):
         os.remove(os.path.join(cwd, name))
 
 
+def delete_files_except(directory_path: str, keep_files: list):
+    for file_name in os.listdir(directory_path):
+        file_path = os.path.join(directory_path, file_name)
+        if os.path.isfile(file_path) and file_name not in keep_files:
+            os.remove(file_path)
+
+
+def zip_folders(folder_names: list, zip_name: str):
+    if not zip_name.endswith('.zip'):
+        zip_name += '.zip'
+    zip_path = os.path.join(os.getcwd(), zip_name)
+    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for folder_name in folder_names:
+            folder_path = os.path.join(os.getcwd(), folder_name)
+            if os.path.isdir(folder_path):
+                for root, dirs, files in os.walk(folder_path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        rel_path = os.path.relpath(file_path, folder_path)
+                        zipf.write(file_path, os.path.join(folder_name, rel_path))
+                shutil.rmtree(folder_path)
+
+
+
+
+
+
 # main script
 
 # Get student folder list
 folders = listdir()
-filter_folders(folders)
+folders = filter_folders(folders)
 scores = []
 
+# Save original files of grading material folder to avoid modification in case of code failure
+original_grading_material_files = list_files(GRADING_MATERIAL_LOCATION)
+original_dir = os.getcwd()
+print('Beginning grading')
 # Grade each file
 for folder in folders:
 
@@ -426,13 +453,15 @@ for folder in folders:
             files_copied = copy_files_to_grading_folder(folder)
 
             # Get ID and name, check if this causes issues
-            original_dir = change_to_grading_dir()
+            change_to_grading_dir(original_dir)
             given_id, given_author = get_id_and_author(file_to_grade)
 
             # Check for errors
             infinite_loop = given_id == 'TimeoutExpired' and given_author == 'TimeoutExpired'
             syntax_error = given_id == 'syntaxError' and given_author == 'syntaxError'
             name_on_file_incorrect = not (given_id == student_id and given_author != 'missing')
+            name_on_file_missing = given_id == 'missing' or given_author == 'missing'
+            name_on_file_missing = name_on_file_missing or len(given_id) == 0 or len(given_author) == 0
 
             # Act on errors if any, otherwise grade
             if infinite_loop:
@@ -442,7 +471,10 @@ for folder in folders:
             elif syntax_error:
                 score = 0
                 feedback_for_student += 'Syntax error in code (0/10)' + '\n'
-
+            elif name_on_file_missing:
+                score = 0
+                feedback_for_student += 'No name or student ID in code (0/10)\n'+\
+                                        'You must define __author__ and __student_number__ !!\n'
             elif name_on_file_incorrect:
                 score = -1
                 feedback_for_student += mismatching_name_prints() + '\n'
@@ -451,19 +483,25 @@ for folder in folders:
                 feedback_for_student += feedback_addition
 
             delete_files(files)
-            os.chdir(original_dir)  # change back to the outside folder
+            os.chdir(original_dir)  # change back to the outside grading folder
 
         else:
             score = 0
             feedback_for_student = 'wrong file name: (0/10) -> should be ' + format_keys_dict(
-                LAB_NAME_GRADING_SOFTWARE_INDEX) + '.py' + '\n'
-            file_to_grade = py_files_without_extension[0] + '.py'
+                LAB_NAME_GRADING_SOFTWARE_INDEX) + '\n'
+            file_to_grade = py_files_without_extension[0]
 
     except Exception as e:
         # In case of bug that was not caught
-        sys.stderr = original_stderr
-        print('ERROR, CONTACT', __maintainer__, 'at:', __email__, file=original_stderr)
+
+        print('ERROR, CONTACT', __maintainer__, 'at:', __email__,'\nDO NOT ATTEMPT TO GRADE AGAIN WITHOUT DELETING AND RECOPYING STUDENT FOLDERS', file=original_stderr)
         print(e, file=original_stderr)
+
+        # reset the grading folder
+        os.chdir(original_dir)
+        delete_files_except(GRADING_MATERIAL_LOCATION, original_grading_material_files)
+
+        # end run
         sys.exit("CANNOT CONTINUE GRADING DUE TO STUDENT: " + name)
 
     # Add score to dictionary
@@ -474,9 +512,13 @@ for folder in folders:
     # Add feedback to students file
     add_feedback_text(folder, feedback_for_student, file_to_grade)
 
+print('Done grading, Saving feedback to zip folder')
+zip_folders(folders, FEEDBACK_ZIP_FOLDER_NAME)
 # csv header
 field_names = ['Name', 'OrgDefinedId',
                GRADES_CSV_HEADER,
                'End-of-Line Indicator']
 # save grades to CSV
+print('Saving grades to CSV')
 save_grade_to_CSV(scores, field_names)
+print('Grading Complete')
