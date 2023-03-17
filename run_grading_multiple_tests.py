@@ -10,7 +10,7 @@ zip files with feedback.
 
 To run, ensure you have the following files in one folder: run_grading_multiple_tests.py,
 grading material folder (with its tests and additional files enclosed),
-and the zip file directly downloaded from brightspace.
+and the zip file directly downloaded from brightspace (THIS VERSION ALLOWS YOU TO HAVE MORE THAN 1 zip AT ONCE).
 
 Any erroneous submissions with mismatching student IDs or infinite loops will be reported in the console
 as error to the user and will inform you of student name, ID and folder name
@@ -39,6 +39,7 @@ GRADES_CSV_HEADER = 'Lab x Points Grade <Numeric MaxPoints:10 Weight:16.66666667
 SCORE_CODE = 'round(passes / result.testsRun * 4, 2)'  # Code used to calculate score (copy from grading file)
 GRADING_MATERIAL_LOCATION = 'grading material'  # The name of the folder that contains the grading script
 FEEDBACK_ZIP_FOLDER_NAME = 'feedback for brightspace'  # Name of folder to which student feedback will be zipped into, DO NOT ADD .zip
+ADD_NAME_TO_CSV = False  # Set to True if you want a name column to show up on the CSV
 ########################## CHANGE EVERY LAB ###########################################################################
 
 ########################## GENERAL CONDITIONS ###########################################################################
@@ -93,7 +94,6 @@ def add_feedback_text(student_folder: str, specific_feedback: str, file_name: st
         new_file_contents = 'ERROR WRITING TO ORIGINAL CODE, FEEDBACK BELOW:\n\n' + specific_feedback
         file.write(new_file_contents)
         file.close()
-
 
 
 def rename_file(file_path, new_name) -> bool:
@@ -396,39 +396,25 @@ def zip_folders(folder_names: list, zip_name: str, root_files: list = None) -> s
     return zip_path
 
 
-def unzip_submissions_folder() -> list:
+def get_zip_filenames(exclude_prefix: str) -> list:
+    zip_filenames = []
+    for filename in os.listdir():
+        if filename.endswith('.zip') and not filename.startswith(exclude_prefix + '-'):
+            zip_filenames.append(filename)
+    return zip_filenames
+
+
+def unzip_single_zip(zip_file_name: str, index_file_name: str) -> list:
     """
     Extracts all files and folders from a zipped folder to a destination directory.
-
     The extracted folder will be renamed with a "DO_NOT_UPLOAD_" prefix.
-
     Returns list of all folders extracted (assuming the only non folder file is global variable INDEX_FILE_NAME)
-
-    Raises:
-        ValueError: If there are no zip files in the current directory or if there is only one zip file in the current directory with the same name as the FEEDBACK_ZIP_FOLDER_NAME variable.
-        ValueError: If there are multiple zip files in the current directory and neither are named FEEDBACK_ZIP_FOLDER_NAME.
     """
-    zip_files = [file for file in os.listdir('.') if file.endswith('.zip')]
-    if len(zip_files) == 0:
-        raise ValueError("No zip files found in current directory.")
-    elif len(zip_files) == 1 and zip_files[0] == FEEDBACK_ZIP_FOLDER_NAME:
-        raise ValueError(
-            f"{FEEDBACK_ZIP_FOLDER_NAME} zip file is the only zip file in the directory and cannot be extracted. Please provide another zip file.")
-    elif FEEDBACK_ZIP_FOLDER_NAME + '.zip' in zip_files:
-        zip_files.remove(FEEDBACK_ZIP_FOLDER_NAME + '.zip')
-
-    valid_zip_files = [file for file in zip_files if file.endswith('.zip')]
-    if len(valid_zip_files) == 0:
-        raise ValueError("No other zip files found in current directory.")
-    elif len(valid_zip_files) > 1:
-        raise ValueError(
-            "More than one valid zip file found in current directory. Please provide only one zip file to extract.")
-
-    extracted_folder = os.path.splitext(valid_zip_files[0])[0] + '.zip'
+    extracted_folder = os.path.splitext(zip_file_name)[0] + '.zip'
     extracted_folder_with_prefix = extracted_folder if extracted_folder.startswith(
         "DO_NOT_UPLOAD_") else f"DO_NOT_UPLOAD_{extracted_folder}"
 
-    with zipfile.ZipFile(valid_zip_files[0], 'r') as zip_ref:
+    with zipfile.ZipFile(zip_file_name, 'r') as zip_ref:
         zip_ref.extractall('.')
         unzipped_files = zip_ref.namelist()
 
@@ -441,13 +427,31 @@ def unzip_submissions_folder() -> list:
         else:
             if file_name not in unzipped_folders:
                 unzipped_folders.append(file_name)
-    unzipped_folders.remove(INDEX_FILE_NAME)
+    unzipped_folders.remove(index_file_name)
 
     os.rename(extracted_folder, extracted_folder_with_prefix)
-    print(f"{valid_zip_files[0]} has been unzipped and renamed to {extracted_folder_with_prefix} successfully.")
+    print(f"{zip_file_name} has been unzipped and renamed to {extracted_folder_with_prefix} successfully.")
 
     return list(set(unzipped_folders))
 
+
+def list_to_string(lst: list) -> str:
+    """
+    Converts a list of strings into a comma-separated string with the last
+    element separated by "and".
+
+    Args:
+        lst (List[str]): A list of strings.
+
+    Returns:
+        str: A comma-separated string with the last element separated by "and".
+    """
+    if len(lst) == 0:
+        return ""
+    elif len(lst) == 1:
+        return lst[0]
+    else:
+        return f"{', '.join(lst[:-1])} and {lst[-1]}"
 
 ######################################################################################################################
 ######################################################################################################################
@@ -456,118 +460,131 @@ def unzip_submissions_folder() -> list:
 
 
 # main script
-
-# Unzip student folders and get their names list
-folders = unzip_submissions_folder()
+# Find zip files
+brightspace_submission_download_zip_names = get_zip_filenames(FEEDBACK_ZIP_FOLDER_NAME)
+print(f"found {len(brightspace_submission_download_zip_names)} zip folders to grade")
+print(f"grading zip folders: {list_to_string(brightspace_submission_download_zip_names)}")
 scores = []
 
-# Save original files of grading material folder to avoid modification in case of code failure
-original_grading_material_files = list_files(GRADING_MATERIAL_LOCATION)
-original_dir = os.getcwd()
+folder_counter = 0
+issues_counter = 0
+for i in range(len(brightspace_submission_download_zip_names)):
+    # Unzip student folders and get their names list
+    folders = unzip_single_zip(brightspace_submission_download_zip_names[i], INDEX_FILE_NAME)
+    folder_counter += len(folders)
+    # Save original files of grading material folder to avoid modification in case of code failure
+    original_grading_material_files = list_files(GRADING_MATERIAL_LOCATION)
+    original_dir = os.getcwd()
 
-print(f"Beginning grading, detected {len(folders)} students")
-# Grade each file
-for folder in folders:
+    print(f"Beginning grading folder '{brightspace_submission_download_zip_names[i]}', detected {len(folders)} students")
+    # Grade each file
+    for folder in folders:
+        # Get name and ID
+        if PRINT_ALL_STUDENTS:
+            print('grading folder', '\'' + folder + '\'', '.......................')
+        name, student_id = parse_name_and_student_id(folder, fix_order=FIX_NAME_ORDER)
 
-    # Get name and ID
-    if PRINT_ALL_STUDENTS:
-        print('grading folder', '\'' + folder + '\'', '.......................')
-    name, student_id = parse_name_and_student_id(folder, fix_order=FIX_NAME_ORDER)
+        try:  # In case an error is caused here, let marker know the student who caused it
+            files = list_files(folder)  # list of files in student folder
+            py_files_without_extension = filter_py_files(files)  # python files without their extension
 
-    try:  # In case an error is caused here, let marker know the student who caused it
-        files = list_files(folder)  # list of files in student folder
-        py_files_without_extension = filter_py_files(files)  # python files without their extension
+            # Begin writing feedback
+            feedback_for_student = name + '\n' \
+                                   + student_id + '\n' \
+                                   + '\ngrading software summary:' + '\n'
 
-        # Begin writing feedback
-        feedback_for_student = name + '\n' \
-                               + student_id + '\n' \
-                               + '\ngrading software summary:' + '\n'
+            # Check if file is one of the possible valid names
+            try:
+                file_to_grade = check_list_for_matching_key(py_files_without_extension)
+            except ValueError:
+                feedback_for_student += more_then_one_file_prints() + '\n'  # more than one VALID file exits
+                continue
 
-        # Check if file is one of the possible valid names
-        try:
-            file_to_grade = check_list_for_matching_key(py_files_without_extension)
-        except ValueError:
-            feedback_for_student += more_then_one_file_prints() + '\n'  # more than one VALID file exits
-            continue
+            if file_to_grade is not None:  # attempt to grade if name is valid
 
-        if file_to_grade is not None:  # attempt to grade if name is valid
+                # Copy and get a list of the files that were copied
+                files_copied = copy_files_to_grading_folder(folder)
 
-            # Copy and get a list of the files that were copied
-            files_copied = copy_files_to_grading_folder(folder)
+                # Get ID and name, check if this causes issues
+                change_to_grading_dir(original_dir)
+                given_id, given_author = get_id_and_author(file_to_grade)
 
-            # Get ID and name, check if this causes issues
-            change_to_grading_dir(original_dir)
-            given_id, given_author = get_id_and_author(file_to_grade)
+                # Check for errors
+                infinite_loop = given_id == 'TimeoutExpired' and given_author == 'TimeoutExpired'
+                syntax_error = given_id == 'syntaxError' and given_author == 'syntaxError'
+                name_on_file_incorrect = not (given_id == student_id and given_author != 'missing')
 
-            # Check for errors
-            infinite_loop = given_id == 'TimeoutExpired' and given_author == 'TimeoutExpired'
-            syntax_error = given_id == 'syntaxError' and given_author == 'syntaxError'
-            name_on_file_incorrect = not (given_id == student_id and given_author != 'missing')
+                # This one checks if the name is either missing or empty
+                name_on_file_missing = given_id == 'missing' or given_author == 'missing'
+                name_on_file_missing = name_on_file_missing or len(given_id) == 0 or len(given_author) == 0
 
-            # This one checks if the name is either missing or empty
-            name_on_file_missing = given_id == 'missing' or given_author == 'missing'
-            name_on_file_missing = name_on_file_missing or len(given_id) == 0 or len(given_author) == 0
+                # Act on errors if any, otherwise grade
+                if infinite_loop:
+                    score = -1
+                    issues_counter += 1
+                    feedback_for_student += infinite_loop_prints() + '\n'
 
-            # Act on errors if any, otherwise grade
-            if infinite_loop:
-                score = -1
-                feedback_for_student += infinite_loop_prints() + '\n'
+                elif syntax_error:
+                    score = 0
+                    feedback_for_student += 'Syntax error in code (0/10)' + '\n'
 
-            elif syntax_error:
+                elif name_on_file_missing:
+                    score = 0
+                    feedback_for_student += 'No name or student ID in code (0/10)\n' + \
+                                            'You must define __author__ and __student_number__ !!\n'
+                elif name_on_file_incorrect:
+                    score = -1
+                    issues_counter += 1
+                    feedback_for_student += mismatching_name_prints() + '\n'
+
+                else:
+                    score, feedback_addition = grade(LAB_NAME_GRADING_SOFTWARE_INDEX[file_to_grade] + '.py')
+                    feedback_for_student += feedback_addition
+
+                # delete files from grading material folder and go back outside of it
+                delete_files(files)
+                os.chdir(original_dir)
+
+            else:  # if file is not a correct name
                 score = 0
-                feedback_for_student += 'Syntax error in code (0/10)' + '\n'
+                feedback_for_student = 'wrong file name: (0/10) -> should be ' + format_keys_dict(
+                    LAB_NAME_GRADING_SOFTWARE_INDEX) + '\n'
+                file_to_grade = py_files_without_extension[0]
 
-            elif name_on_file_missing:
-                score = 0
-                feedback_for_student += 'No name or student ID in code (0/10)\n' + \
-                                        'You must define __author__ and __student_number__ !!\n'
-            elif name_on_file_incorrect:
-                score = -1
-                feedback_for_student += mismatching_name_prints() + '\n'
+        except Exception as e:
+            # In case of bug that was not caught
 
-            else:
-                score, feedback_addition = grade(LAB_NAME_GRADING_SOFTWARE_INDEX[file_to_grade] + '.py')
-                feedback_for_student += feedback_addition
+            print('ERROR, CONTACT', __maintainer__, 'at:', __email__,
+                  '\nDO NOT ATTEMPT TO GRADE AGAIN WITHOUT DELETING AND RECOPYING STUDENT FOLDERS',
+                  file=original_stderr)
+            print(e, file=original_stderr)
 
-            # delete files from grading material folder and go back outside of it
-            delete_files(files)
+            # reset the grading folder
             os.chdir(original_dir)
+            delete_files_except(GRADING_MATERIAL_LOCATION, original_grading_material_files)
 
-        else:  # if file is not a correct name
-            score = 0
-            feedback_for_student = 'wrong file name: (0/10) -> should be ' + format_keys_dict(
-                LAB_NAME_GRADING_SOFTWARE_INDEX) + '\n'
-            file_to_grade = py_files_without_extension[0]
+            # end run
+            sys.exit("CANNOT CONTINUE GRADING DUE TO STUDENT: " + name)
 
-    except Exception as e:
-        # In case of bug that was not caught
+        # Add score to dictionary
+        score_dict = {'OrgDefinedId': student_id,
+                       GRADES_CSV_HEADER: score,
+                       "End-of-Line Indicator": '#'}
+        if ADD_NAME_TO_CSV:
+            score_dict['Name'] = name
+        scores.append(score_dict)
 
-        print('ERROR, CONTACT', __maintainer__, 'at:', __email__,
-              '\nDO NOT ATTEMPT TO GRADE AGAIN WITHOUT DELETING AND RECOPYING STUDENT FOLDERS', file=original_stderr)
-        print(e, file=original_stderr)
+        # Add feedback to students file
+        add_feedback_text(folder, feedback_for_student, file_to_grade)
 
-        # reset the grading folder
-        os.chdir(original_dir)
-        delete_files_except(GRADING_MATERIAL_LOCATION, original_grading_material_files)
+    print(f"Done grading '{brightspace_submission_download_zip_names[i]}', Saving feedback to zip folder '{FEEDBACK_ZIP_FOLDER_NAME}-{i + 1}'")
+    zip_folders(folders, f"{FEEDBACK_ZIP_FOLDER_NAME}-{i + 1}", [INDEX_FILE_NAME])
 
-        # end run
-        sys.exit("CANNOT CONTINUE GRADING DUE TO STUDENT: " + name)
-
-    # Add score to dictionary
-    scores.append({'Name': name, 'OrgDefinedId': student_id,
-                   GRADES_CSV_HEADER: score,
-                   "End-of-Line Indicator": '#'})
-
-    # Add feedback to students file
-    add_feedback_text(folder, feedback_for_student, file_to_grade)
-
-print('Done grading, Saving feedback to zip folder')
-zip_folders(folders, FEEDBACK_ZIP_FOLDER_NAME, [INDEX_FILE_NAME])
-
+if len(scores) != folder_counter:
+    raise ValueError("Length of grades does not match folders, results invalidated")
+print(f"Done grading all folders, there were {folder_counter} students, {issues_counter} could not be graded")
 # csv header
-field_names = ['Name', 'OrgDefinedId',
-               GRADES_CSV_HEADER,
-               'End-of-Line Indicator']
+field_names = list(scores[0].keys())
 
 # save grades to CSV
 print('Saving grades to CSV')
