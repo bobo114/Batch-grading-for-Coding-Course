@@ -307,7 +307,7 @@ def filter_py_files(file_list: list) -> list:
     return filtered_list
 
 
-def copy_files_to_grading_folder(folder_name: str):
+def copy_files_to_grading_folder(folder_name: str, files_in_folder: str):
     """
     Given a folder name, copy all files in that folder to a new folder
     named 'GRADING_MATERIAL_LOCATION' in the same directory as the original folder.
@@ -322,7 +322,7 @@ def copy_files_to_grading_folder(folder_name: str):
         os.mkdir(grading_folder_path)
 
     # Copy all files from the original folder to the grading folder
-    for filename in os.listdir(folder_path):
+    for filename in files_in_folder:
         source_path = os.path.join(folder_path, filename)
         if os.path.isfile(source_path):
             destination_path = os.path.join(grading_folder_path, filename)
@@ -485,8 +485,9 @@ for i in range(len(brightspace_submission_download_zip_names)):
         name, student_id = parse_name_and_student_id(folder, fix_order=FIX_NAME_ORDER)
 
         try:  # In case an error is caused here, let marker know the student who caused it
-            files = list_files(folder)  # list of files in student folder
-            py_files_without_extension = filter_py_files(files)  # python files without their extension
+            files_in_student_folder = list_files(folder)  # list of files in student folder
+            py_files_without_extension = filter_py_files(files_in_student_folder)  # python files without their extension
+            py_files_with_extension = [file_name + ".py" for file_name in py_files_without_extension]
 
             # Begin writing feedback
             feedback_for_student = name + '\n' \
@@ -503,7 +504,7 @@ for i in range(len(brightspace_submission_download_zip_names)):
             if file_to_grade is not None:  # attempt to grade if name is valid
 
                 # Copy and get a list of the files that were copied
-                files_copied = copy_files_to_grading_folder(folder)
+                copy_files_to_grading_folder(folder, py_files_with_extension)
 
                 # Get ID and name, check if this causes issues
                 change_to_grading_dir(original_dir)
@@ -542,7 +543,7 @@ for i in range(len(brightspace_submission_download_zip_names)):
                     feedback_for_student += feedback_addition
 
                 # delete files from grading material folder and go back outside of it
-                delete_files(files)
+                delete_files(py_files_with_extension)
                 os.chdir(original_dir)
 
             else:  # if file is not a correct name
