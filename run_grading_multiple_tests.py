@@ -38,7 +38,7 @@ SAVE_GRADES_TO = 'labx_Grades.csv'
 GRADES_CSV_HEADER = 'Lab x Points Grade <Numeric MaxPoints:10 Weight:16.66666667 Category:Labs CategoryWeight:10>'
 SCORE_CODE = 'round(passes / result.testsRun * 4, 2)'  # Code used to calculate score (copy from grading file)
 GRADING_MATERIAL_LOCATION = 'grading material'  # The name of the folder that contains the grading script
-FEEDBACK_ZIP_FOLDER_NAME = 'feedback for brightspace'  # Name of folder to which student feedback will be zipped into
+FEEDBACK_ZIP_FOLDER_NAME = 'feedback for brightspace'  # Name of folder to which student feedback will be zipped into, DO NOT ADD .zip
 ########################## CHANGE EVERY LAB ###########################################################################
 
 ########################## GENERAL CONDITIONS ###########################################################################
