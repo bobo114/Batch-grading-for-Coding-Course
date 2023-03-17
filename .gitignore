@@ -1,0 +1,10 @@
+# Ignore all files in the folder
+folder/*
+
+# Except for these files
+!folder/example for run_grading_multiple_tests
+!folder/older run_grading
+!folder/README.md
+!folder/run_grading_multiple_tests.py
+!folder/.gitignore
+!folder/.gitattributes
