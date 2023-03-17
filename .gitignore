@@ -1,11 +1,10 @@
-# Ignore all files in the folder
-Batch-grading-for-Coding-Course/*
+# Ignore all files in the main directory
+/*
 
-# Except for these files
-!Batch-grading-for-Coding-Course/example for run_grading_multiple_tests
-!Batch-grading-for-Coding-Course/older run_grading
-!Batch-grading-for-Coding-Course/README.md
-!Batch-grading-for-Coding-Course/run_grading_multiple_tests.py
-!Batch-grading-for-Coding-Course/.gitignore
-!Batch-grading-for-Coding-Course/.gitattributes
+# Except for these two directories
+!/example for run_grading_multiple_tests/
+!/older run_grading/
 
+# Ignore specific files
+README.md
+run_grading_multiple_tests.py
