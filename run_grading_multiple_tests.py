@@ -68,11 +68,11 @@ def add_feedback_text(student_folder: str, specific_feedback: str, file_name: st
     # read python file
     cannot_read_original = False
     try:
-        file = open(src_file, 'r')
-        file_contents = file.read()
-        file.close()
-    except:
+        with open(src_file, 'r', encoding='utf-8') as file:
+            file_contents = file.read()
+    except Exception as err:
         cannot_read_original = True
+        print(f"An error occurred: {err}")
         print(
             'Review student (odd file encoding format -> feedback saved to seperate feedback.txt file in student\'s folder): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'\n',
             file=original_stderr)
@@ -87,12 +87,13 @@ def add_feedback_text(student_folder: str, specific_feedback: str, file_name: st
         rename_file(src_file, 'FEEDBACK_' + file_name + '.py')
 
     else:
+        os.remove(src_file)
         src_file = os.path.abspath(os.getcwd()) + '\\' + student_folder + '\\' + 'feedback.txt'
         file = open(src_file, 'w')
         new_file_contents = 'ERROR WRITING TO ORIGINAL CODE, FEEDBACK BELOW:\n\n' + specific_feedback
         file.write(new_file_contents)
         file.close()
-        delete_files([src_file])
+
 
 
 def rename_file(file_path, new_name) -> bool:
@@ -464,7 +465,7 @@ scores = []
 original_grading_material_files = list_files(GRADING_MATERIAL_LOCATION)
 original_dir = os.getcwd()
 
-print('Beginning grading')
+print(f"Beginning grading, detected {len(folders)} students")
 # Grade each file
 for folder in folders:
 
