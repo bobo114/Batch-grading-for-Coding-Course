@@ -416,12 +416,67 @@ def zip_folders(folder_names: list, zip_name: str, root_files: list = None):
                     os.remove(file)
     return zip_path
 
+def unzip_submissions_folder():
+    """
+    Extracts all files and folders from a zipped folder to a destination directory.
+
+    The extracted folder will be renamed with a "DO_NOT_UPLOAD_" prefix.
+
+    Raises:
+        ValueError: If there are no zip files in the current directory or if there is only one zip file in the current directory with the same name as the FEEDBACK_ZIP_FOLDER_NAME variable.
+        ValueError: If there are multiple zip files in the current directory and neither are named FEEDBACK_ZIP_FOLDER_NAME.
+    """
+    zip_files = [file for file in os.listdir('.') if file.endswith('.zip')]
+    if len(zip_files) == 0:
+        raise ValueError("No zip files found in current directory.")
+    elif len(zip_files) == 1 and zip_files[0] == FEEDBACK_ZIP_FOLDER_NAME:
+        raise ValueError(
+            f"{FEEDBACK_ZIP_FOLDER_NAME} zip file is the only zip file in the directory and cannot be extracted. Please provide another zip file.")
+    elif FEEDBACK_ZIP_FOLDER_NAME + '.zip' in zip_files:
+        zip_files.remove(FEEDBACK_ZIP_FOLDER_NAME + '.zip')
+
+    valid_zip_files = [file for file in zip_files if file.endswith('.zip')]
+    if len(valid_zip_files) == 0:
+        raise ValueError("No other zip files found in current directory.")
+    elif len(valid_zip_files) > 1:
+        raise ValueError(
+            "More than one valid zip file found in current directory. Please provide only one zip file to extract.")
+
+    extracted_folder = os.path.splitext(valid_zip_files[0])[0] + '.zip'
+    extracted_folder_with_prefix = extracted_folder if extracted_folder.startswith(
+        "DO_NOT_UPLOAD_") else f"DO_NOT_UPLOAD_{extracted_folder}"
+
+    with zipfile.ZipFile(valid_zip_files[0], 'r') as zip_ref:
+        zip_ref.extractall('.')
+        unzipped_files = zip_ref.namelist()
+
+    unzipped_folders = []
+    for name in unzipped_files:
+        if '/' in name:
+            folder_name = name.split('/')[0]
+            if folder_name not in unzipped_folders:
+                unzipped_folders.append(folder_name)
+        else:
+            if name not in unzipped_folders:
+                unzipped_folders.append(name)
+    unzipped_folders.remove(INDEX_FILE_NAME)
+
+    os.rename(extracted_folder, extracted_folder_with_prefix)
+    print(f"{valid_zip_files[0]} has been unzipped and renamed to {extracted_folder_with_prefix} successfully.")
+
+    return list(set(unzipped_folders))
+
+
+######################################################################################################################
+######################################################################################################################
+######################################################################################################################
+######################################################################################################################
+
 
 # main script
 
 # Get student folder list
-folders = listdir()
-folders = filter_folders(folders)
+folders = unzip_submissions_folder()
 scores = []
 
 # Save original files of grading material folder to avoid modification in case of code failure
