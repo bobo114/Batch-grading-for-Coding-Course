@@ -9,7 +9,7 @@ To use the multiple tests grading script follow these steps:
 1. Download student submissions from brightspace as a batch (this can grade more than 1 batch, so if there are more than 200 students you can put in the multiple zip files you downloaded)
 2. add run_grading_multiple_tests.py into a folder containing student submission folders (keep them in the zip file you downloaded)
 3. add a folder with all grading scripts and their additional data files to the folder
-4. rename the variables according to your usage specifications between line 33 to 42 in the following region  
+4. rename the variables according to your usage specifications between line 35 to 44 in the following region  
        
        LAB_NAME_GRADING_SOFTWARE_INDEX = {'student_age_list': 'student_age_list_test',
                                           'student_failures_list': 'student_failures_list_test',

@@ -22,6 +22,7 @@ import shutil
 import subprocess
 import sys
 import zipfile
+import traceback
 
 __author__ = "Boaz Aharony"
 __copyright__ = "Copyright 2023, Boaz Aharony"
@@ -201,7 +202,7 @@ def grade(lab_grading_software_name: str) -> tuple:
         code = 'import sys\n' \
                'sys.stderr = sys.stdout\n' \
                + open(lab_grading_software_name).read() + '\n' \
-               + 'print(' + SCORE_CODE + ', end=\'\')'
+               + f'print(\'$#%|\'+str({SCORE_CODE})+\'|%#$\', end=\'\')'
 
         # will throw timeout error if exceeds TIMEOUT seconds
         result = subprocess.run([sys.executable, '-c', code], capture_output=True, text=True,
@@ -211,15 +212,42 @@ def grade(lab_grading_software_name: str) -> tuple:
         output = result.stdout.split('\n')
 
         # get score
-        gscore = float(output[-1])
-
-        # Add the rest to the feedback
-        feedback_for_file = '\n'.join(output[:-1])
+        try:
+            gscore = parse_pattern(output[-1])  # ensures it is only reading what was intended to be the score
+            # Add the rest to the feedback
+            feedback_for_file = '\n'.join(output[:-1])
+        except ValueError:
+            gscore = -1
+            feedback_for_file = test_code_error_prints()
 
     except subprocess.TimeoutExpired:  # Possible infinite loop
-        gscore = -1  # to highlight student on csv when opened in excel
+        gscore = -1  # to highlight student on csv when opened in Excel
         feedback_for_file = infinite_loop_prints()
+
     return gscore, feedback_for_file  # named gscore to not interfere with score
+
+
+def parse_pattern(s: str) -> float:
+    """
+    Extracts a float value from the input string if it starts with "$#%|" and ends with "|%#$".
+
+    Args:
+        s: The input string to parse.
+
+    Returns:
+        The float value contained within the input string.
+
+    Raises:
+        ValueError: If the input string does not match the expected format or if the float value cannot be extracted.
+    """
+    if not s.startswith("$#%|") or not s.endswith("|%#$"):
+        raise ValueError("Input string does not match the expected format")
+    try:
+        start = s.index('|') + 1
+        end = s.index('|', start)
+        return float(s[start:end])
+    except ValueError:
+        raise ValueError("Failed to parse float value from input string")
 
 
 def mismatching_name_prints():
@@ -253,12 +281,24 @@ def infinite_loop_prints():
 
 
 def more_then_one_file_prints():
-    """Prints necessary infinite loop actions
+    """Prints necessary actions if more than 1 valid file is submitted
     """
     feedback_for_file = 'Student has more than 1 file matching the possible submissions' + '\n' + \
                         'FURTHER REVIEW REQUIRED' + '\n'
     print(
         'Review student (more than 1 possible submission file): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
+        file=original_stderr)
+    print(file=original_stderr)
+    return feedback_for_file
+
+
+def test_code_error_prints():
+    """Prints necessary test code error actions
+    """
+    feedback_for_file = 'Student has caused an error with the grading software' + '\n' + \
+                        'FURTHER REVIEW REQUIRED' + '\n'
+    print(
+        'Review student (grading code created an error): ' + name + ', ID#: ' + student_id + ', Folder name:\'' + folder + '\'',
         file=original_stderr)
     print(file=original_stderr)
     return feedback_for_file
@@ -453,6 +493,7 @@ def list_to_string(lst: list) -> str:
     else:
         return f"{', '.join(lst[:-1])} and {lst[-1]}"
 
+
 ######################################################################################################################
 ######################################################################################################################
 ######################################################################################################################
@@ -476,7 +517,8 @@ for i in range(len(brightspace_submission_download_zip_names)):
     original_grading_material_files = list_files(GRADING_MATERIAL_LOCATION)
     original_dir = os.getcwd()
 
-    print(f"Beginning grading folder '{brightspace_submission_download_zip_names[i]}', detected {len(folders)} students")
+    print(
+        f"Beginning grading folder '{brightspace_submission_download_zip_names[i]}', detected {len(folders)} students")
     # Grade each file
     for folder in folders:
         # Get name and ID
@@ -486,7 +528,8 @@ for i in range(len(brightspace_submission_download_zip_names)):
 
         try:  # In case an error is caused here, let marker know the student who caused it
             files_in_student_folder = list_files(folder)  # list of files in student folder
-            py_files_without_extension = filter_py_files(files_in_student_folder)  # python files without their extension
+            py_files_without_extension = filter_py_files(
+                files_in_student_folder)  # python files without their extension
             py_files_with_extension = [file_name + ".py" for file_name in py_files_without_extension]
 
             # Begin writing feedback
@@ -541,6 +584,7 @@ for i in range(len(brightspace_submission_download_zip_names)):
                 else:
                     score, feedback_addition = grade(LAB_NAME_GRADING_SOFTWARE_INDEX[file_to_grade] + '.py')
                     feedback_for_student += feedback_addition
+                    issues_counter += 1 if score == -1 else 0  # in case grading software caused an issue
 
                 # delete files from grading material folder and go back outside of it
                 delete_files(py_files_with_extension)
@@ -555,22 +599,24 @@ for i in range(len(brightspace_submission_download_zip_names)):
         except Exception as e:
             # In case of bug that was not caught
 
-            print('ERROR, CONTACT', __maintainer__, 'at:', __email__,
-                  '\nDO NOT ATTEMPT TO GRADE AGAIN WITHOUT DELETING AND RECOPYING STUDENT FOLDERS',
-                  file=original_stderr)
-            print(e, file=original_stderr)
-
             # reset the grading folder
             os.chdir(original_dir)
             delete_files_except(GRADING_MATERIAL_LOCATION, original_grading_material_files)
+
+            print(f'ERROR due to folder \'{folder}\' \nCONTACT', __maintainer__, 'at:', __email__,
+                  '\nDO NOT ATTEMPT TO GRADE AGAIN WITHOUT DELETING all student folders',
+                  file=original_stderr)
+            print(e, file=original_stderr)
+            tb = traceback.format_exc()
+            print("Error occurred on line:", tb.split("\n")[-2].split(",")[1])
 
             # end run
             sys.exit("CANNOT CONTINUE GRADING DUE TO STUDENT: " + name)
 
         # Add score to dictionary
         score_dict = {'OrgDefinedId': student_id,
-                       GRADES_CSV_HEADER: score,
-                       "End-of-Line Indicator": '#'}
+                      GRADES_CSV_HEADER: score,
+                      "End-of-Line Indicator": '#'}
         if ADD_NAME_TO_CSV:
             score_dict['Name'] = name
         scores.append(score_dict)
@@ -578,7 +624,8 @@ for i in range(len(brightspace_submission_download_zip_names)):
         # Add feedback to students file
         add_feedback_text(folder, feedback_for_student, file_to_grade)
 
-    print(f"Done grading '{brightspace_submission_download_zip_names[i]}', Saving feedback to zip folder '{FEEDBACK_ZIP_FOLDER_NAME}-{i + 1}'")
+    print(
+        f"Done grading '{brightspace_submission_download_zip_names[i]}', Saving feedback to zip folder '{FEEDBACK_ZIP_FOLDER_NAME}-{i + 1}'")
     zip_folders(folders, f"{FEEDBACK_ZIP_FOLDER_NAME}-{i + 1}", [INDEX_FILE_NAME])
 
 if len(scores) != folder_counter:
