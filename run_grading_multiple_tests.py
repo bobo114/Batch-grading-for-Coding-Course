@@ -169,15 +169,15 @@ def get_id_and_author(lab_name: str) -> tuple:
     """Returns the current name and id of the lab, 'syntaxError' if the file can't run
     and 'TimeoutExpired' if the file takes too long to load
     """
-    name_exist_check_code = 'import ' + lab_name + '\n' + \
-                            'if hasattr(' + lab_name + ', \'__student_number__\'):\n' \
-                                                       '\tprint(' + lab_name + '.__student_number__)\n' \
-                                                                               'else:\n' \
-                                                                               '\tprint(\'missing\')\n\n' \
-                                                                               'if hasattr(' + lab_name + ', \'__author__\'):\n' \
-                                                                                                          '\tprint(' + lab_name + '.__author__)\n' \
-                                                                                                                                  'else:\n' \
-                                                                                                                                  '\tprint(\'missing\')'
+    name_exist_check_code = f"import {lab_name}\n" + \
+                            f"if hasattr({lab_name}, '__student_number__'):\n"\
+                                f"\tprint({lab_name}.__student_number__)\n" \
+                            "else:\n" \
+                                "\tprint()\n\n" \
+                            f"if hasattr({lab_name}, '__author__'):\n" \
+                                f"\tprint({lab_name}.__author__)\n" \
+                            "else:\n" \
+                                "\tprint()"
     try:
         name_and_id_check = subprocess.run([sys.executable, '-c', name_exist_check_code], capture_output=True,
                                            text=True, timeout=TIMEOUT)
@@ -347,7 +347,7 @@ def filter_py_files(file_list: list) -> list:
     return filtered_list
 
 
-def copy_files_to_grading_folder(folder_name: str, files_in_folder: str):
+def copy_files_to_grading_folder(folder_name: str, files_in_folder: list) -> list:
     """
     Given a folder name, copy all files in that folder to a new folder
     named 'GRADING_MATERIAL_LOCATION' in the same directory as the original folder.
@@ -509,6 +509,9 @@ scores = []
 
 folder_counter = 0
 issues_counter = 0
+missing_names_counter = 0
+wrong_file_names_counter = 0
+syntax_error_counters = 0
 for i in range(len(brightspace_submission_download_zip_names)):
     # Unzip student folders and get their names list
     folders = unzip_single_zip(brightspace_submission_download_zip_names[i], INDEX_FILE_NAME)
@@ -523,7 +526,7 @@ for i in range(len(brightspace_submission_download_zip_names)):
     for folder in folders:
         # Get name and ID
         if PRINT_ALL_STUDENTS:
-            print('grading folder', '\'' + folder + '\'', '.......................')
+            print(f"grading folder '{folder}' .......................")
         name, student_id = parse_name_and_student_id(folder, fix_order=FIX_NAME_ORDER)
 
         try:  # In case an error is caused here, let marker know the student who caused it
@@ -533,9 +536,7 @@ for i in range(len(brightspace_submission_download_zip_names)):
             py_files_with_extension = [file_name + ".py" for file_name in py_files_without_extension]
 
             # Begin writing feedback
-            feedback_for_student = name + '\n' \
-                                   + student_id + '\n' \
-                                   + '\ngrading software summary:' + '\n'
+            feedback_for_student = f"{name}\n{student_id}\n\ngrading software summary:\n"
 
             # Check if file is one of the possible valid names
             try:
@@ -553,14 +554,15 @@ for i in range(len(brightspace_submission_download_zip_names)):
                 change_to_grading_dir(original_dir)
                 given_id, given_author = get_id_and_author(file_to_grade)
 
+
+
                 # Check for errors
                 infinite_loop = given_id == 'TimeoutExpired' and given_author == 'TimeoutExpired'
                 syntax_error = given_id == 'syntaxError' and given_author == 'syntaxError'
-                name_on_file_incorrect = not (given_id == student_id and given_author != 'missing')
+                id_on_file_incorrect = given_id != student_id
 
                 # This one checks if the name is either missing or empty
-                name_on_file_missing = given_id == 'missing' or given_author == 'missing'
-                name_on_file_missing = name_on_file_missing or len(given_id) == 0 or len(given_author) == 0
+                name_on_file_missing = len(given_id) == 0 or len(given_author) == 0
 
                 # Act on errors if any, otherwise grade
                 if infinite_loop:
@@ -570,14 +572,16 @@ for i in range(len(brightspace_submission_download_zip_names)):
 
                 elif syntax_error:
                     score = 0
+                    syntax_error_counters += 1
                     feedback_for_student += 'Syntax error in code (0/10)' + '\n'
 
                 elif name_on_file_missing:
                     score = 0
+                    missing_names_counter += 1
                     feedback_for_student += 'No name or student ID in code (0/10)\n' + \
                                             'You must define __author__ and __student_number__ !!\n'
-                elif name_on_file_incorrect:
-                    score = -1
+                elif id_on_file_incorrect:
+                    score = -1 # TODO add simmiliarity
                     issues_counter += 1
                     feedback_for_student += mismatching_name_prints() + '\n'
 
@@ -592,6 +596,7 @@ for i in range(len(brightspace_submission_download_zip_names)):
 
             else:  # if file is not a correct name
                 score = 0
+                wrong_file_names_counter += 1
                 feedback_for_student = 'wrong file name: (0/10) -> should be ' + format_keys_dict(
                     LAB_NAME_GRADING_SOFTWARE_INDEX) + '\n'
                 file_to_grade = py_files_without_extension[0]
@@ -625,12 +630,19 @@ for i in range(len(brightspace_submission_download_zip_names)):
         add_feedback_text(folder, feedback_for_student, file_to_grade)
 
     print(
-        f"Done grading '{brightspace_submission_download_zip_names[i]}', Saving feedback to zip folder '{FEEDBACK_ZIP_FOLDER_NAME}-{i + 1}'")
+        f"Done grading '{brightspace_submission_download_zip_names[i]}', "
+        f"Saving feedback to zip folder '{FEEDBACK_ZIP_FOLDER_NAME}-{i + 1}'")
     zip_folders(folders, f"{FEEDBACK_ZIP_FOLDER_NAME}-{i + 1}", [INDEX_FILE_NAME])
 
 if len(scores) != folder_counter:
     raise ValueError("Length of grades does not match folders, results invalidated")
+
 print(f"Done grading all folders, there were {folder_counter} students, {issues_counter} could not be graded")
+print(f"\n------additional statistics-----\n"
+      f"students with:\n"
+      f"\tsyntax errors: {syntax_error_counters}\n"
+      f"\twrong filenames: {wrong_file_names_counter}\n"
+      f"\tName/ID missing from file: {missing_names_counter}\n")
 # csv header
 field_names = list(scores[0].keys())
 
