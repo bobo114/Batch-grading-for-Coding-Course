@@ -23,6 +23,7 @@ import subprocess
 import sys
 import zipfile
 import traceback
+import signal
 
 __author__ = "Boaz Aharony"
 __copyright__ = "Copyright 2023, Boaz Aharony"
@@ -44,6 +45,7 @@ ADD_NAME_TO_CSV = False  # Set to True if you want a name column to show up on t
 ########################## CHANGE EVERY LAB ###########################################################################
 
 ########################## GENERAL CONDITIONS ###########################################################################
+TEAM_NAME_CHECK = True
 FIX_NAME_ORDER = True  # make program print first name then last name onto csv and student feedback when set to true
 PRINT_ALL_STUDENTS = False  # Prints student that it is currently grading (use for debugging)
 TIMEOUT = 2  # set for limiting maximum runtime of a students code check (in seconds)
@@ -165,19 +167,21 @@ def save_grade_to_CSV(grades: list, fieldnames: list):
         writer.writerows(grades)
 
 
-def get_id_and_author(lab_name: str) -> tuple:
+def get_id_and_author(lab_name: str,check_team=False) -> tuple:
     """Returns the current name and id of the lab, 'syntaxError' if the file can't run
     and 'TimeoutExpired' if the file takes too long to load
     """
     name_exist_check_code = f"import {lab_name}\n" + \
-                            f"if hasattr({lab_name}, '__student_number__'):\n"\
-                                f"\tprint({lab_name}.__student_number__)\n" \
+                            f"if hasattr({lab_name}, '__student_number__'):\n" \
+                            f"\tprint({lab_name}.__student_number__)\n" \
                             "else:\n" \
-                                "\tprint()\n\n" \
+                            "\tprint()\n\n" \
                             f"if hasattr({lab_name}, '__author__'):\n" \
-                                f"\tprint({lab_name}.__author__)\n" \
+                            f"\tprint({lab_name}.__author__)\n" \
                             "else:\n" \
-                                "\tprint()"
+                            "\tprint()"
+    if check_team:
+        name_exist_check_code += f"\nfrom {lab_name} import __team__"
     try:
         name_and_id_check = subprocess.run([sys.executable, '-c', name_exist_check_code], capture_output=True,
                                            text=True, timeout=TIMEOUT)
@@ -395,16 +399,19 @@ def change_to_grading_dir(current_dir: str):
     os.chdir(new_dir)
 
 
-def delete_files(file_names: list):
+def delete_files(file_names: list, supress_errors=False):
     """
     Deletes all files with the names specified in a list from the current working directory.
     Throws an error if a file name from the list is not found in the directory.
     """
     cwd = os.getcwd()
     for name in file_names:
-        if not os.path.isfile(os.path.join(cwd, name)):
+        if not os.path.isfile(os.path.join(cwd, name)) and not supress_errors:
             raise FileNotFoundError(f"File '{name}' not found in directory '{cwd}'.")
-        os.remove(os.path.join(cwd, name))
+        if not supress_errors:
+            os.remove(os.path.join(cwd, name))
+        else:
+            shutil.rmtree(os.path.join(cwd, name))
 
 
 def delete_files_except(directory_path: str, keep_files: list):
@@ -494,6 +501,20 @@ def list_to_string(lst: list) -> str:
         return f"{', '.join(lst[:-1])} and {lst[-1]}"
 
 
+def handle_signal(signal_num, frame):
+    # Code to execute when the SIGINT signal is received
+    print("Stopping the code...")
+    # Code to perform some final steps before stopping the code
+    os.chdir(original_dir)
+    delete_files_except(GRADING_MATERIAL_LOCATION, original_grading_material_files)
+    delete_files([INDEX_FILE_NAME])
+    delete_files(folders, supress_errors=True)
+
+    sys.exit(0)
+
+
+signal.signal(signal.SIGINT, handle_signal)
+
 ######################################################################################################################
 ######################################################################################################################
 ######################################################################################################################
@@ -512,13 +533,18 @@ issues_counter = 0
 missing_names_counter = 0
 wrong_file_names_counter = 0
 syntax_error_counters = 0
+
+#TODO test
+grade_stats_dictionary = {key: [] for key in LAB_NAME_GRADING_SOFTWARE_INDEX.keys()}
+#TODO test
+
+# Save original files of grading material folder to avoid modification in case of code failure
+original_grading_material_files = list_files(GRADING_MATERIAL_LOCATION)
+original_dir = os.getcwd()
 for i in range(len(brightspace_submission_download_zip_names)):
     # Unzip student folders and get their names list
     folders = unzip_single_zip(brightspace_submission_download_zip_names[i], INDEX_FILE_NAME)
     folder_counter += len(folders)
-    # Save original files of grading material folder to avoid modification in case of code failure
-    original_grading_material_files = list_files(GRADING_MATERIAL_LOCATION)
-    original_dir = os.getcwd()
 
     print(
         f"Beginning grading folder '{brightspace_submission_download_zip_names[i]}', detected {len(folders)} students")
@@ -542,6 +568,7 @@ for i in range(len(brightspace_submission_download_zip_names)):
             try:
                 file_to_grade = check_list_for_matching_key(py_files_without_extension)
             except ValueError:
+                # TODO add more action in this case
                 feedback_for_student += more_then_one_file_prints() + '\n'  # more than one VALID file exits
                 continue
 
@@ -552,9 +579,7 @@ for i in range(len(brightspace_submission_download_zip_names)):
 
                 # Get ID and name, check if this causes issues
                 change_to_grading_dir(original_dir)
-                given_id, given_author = get_id_and_author(file_to_grade)
-
-
+                given_id, given_author = get_id_and_author(file_to_grade, check_team=TEAM_NAME_CHECK)
 
                 # Check for errors
                 infinite_loop = given_id == 'TimeoutExpired' and given_author == 'TimeoutExpired'
@@ -581,7 +606,7 @@ for i in range(len(brightspace_submission_download_zip_names)):
                     feedback_for_student += 'No name or student ID in code (0/10)\n' + \
                                             'You must define __author__ and __student_number__ !!\n'
                 elif id_on_file_incorrect:
-                    score = -1 # TODO add simmiliarity
+                    score = -1  # TODO add simmiliarity
                     issues_counter += 1
                     feedback_for_student += mismatching_name_prints() + '\n'
 
@@ -589,10 +614,14 @@ for i in range(len(brightspace_submission_download_zip_names)):
                     score, feedback_addition = grade(LAB_NAME_GRADING_SOFTWARE_INDEX[file_to_grade] + '.py')
                     feedback_for_student += feedback_addition
                     issues_counter += 1 if score == -1 else 0  # in case grading software caused an issue
-
+                    # TODO check back
+                    if score != -1:
+                        grade_stats_dictionary[file_to_grade].append(score)
+                    # TODO check back
                 # delete files from grading material folder and go back outside of it
                 delete_files(py_files_with_extension)
                 os.chdir(original_dir)
+
 
             else:  # if file is not a correct name
                 score = 0
@@ -626,6 +655,7 @@ for i in range(len(brightspace_submission_download_zip_names)):
             score_dict['Name'] = name
         scores.append(score_dict)
 
+
         # Add feedback to students file
         add_feedback_text(folder, feedback_for_student, file_to_grade)
 
@@ -643,6 +673,12 @@ print(f"\n------additional statistics-----\n"
       f"\tsyntax errors: {syntax_error_counters}\n"
       f"\twrong filenames: {wrong_file_names_counter}\n"
       f"\tName/ID missing from file: {missing_names_counter}\n")
+print(f'-------per-function statistics------')
+from statistics import mean
+print('function name\t:\taverage grade')
+for func in grade_stats_dictionary:
+    print(f"{func}: {round( mean(grade_stats_dictionary[func]), 2)}")
+print()
 # csv header
 field_names = list(scores[0].keys())
 
